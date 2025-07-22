@@ -1,1 +1,141 @@
 // app global css in SCSS form
+
+// 淡蓝色科技风格全局样式
+body {
+  background: linear-gradient(135deg, #F5F8FA 0%, #E3F2FD 50%, #F5F8FA 100%);
+  color: $tech-text;
+  font-family: 'Orbitron', 'Courier New', monospace;
+}
+
+// 科技风格卡片
+.tech-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 248, 250, 0.95) 100%);
+  border: 1px solid $tech-border;
+  border-radius: 12px;
+  box-shadow: 
+    0 8px 32px rgba(74, 144, 226, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+// 科技按钮样式
+.tech-btn {
+  background: linear-gradient(145deg, rgba(74, 144, 226, 0.1) 0%, rgba(255, 255, 255, 0.9) 100%);
+  border: 1px solid $tech-border;
+  color: $tech-text;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    box-shadow: 0 4px 20px rgba(74, 144, 226, 0.3);
+    transform: translateY(-2px);
+    background: linear-gradient(145deg, rgba(74, 144, 226, 0.2) 0%, rgba(255, 255, 255, 1) 100%);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// 科技风格输入框
+.tech-input {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid $tech-border;
+  color: $tech-text;
+  border-radius: 8px;
+  
+  &:focus {
+    box-shadow: 0 0 15px rgba(74, 144, 226, 0.2);
+    border-color: $tech-glow;
+  }
+}
+
+// 科技风格进度条
+.tech-progress {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid $tech-border;
+  border-radius: 4px;
+  
+  .q-linear-progress__track {
+    background: rgba(74, 144, 226, 0.1);
+  }
+  
+  .q-linear-progress__model {
+    background: linear-gradient(90deg, $tech-border, $tech-glow);
+    box-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
+  }
+}
+
+// 科技风格图标
+.tech-icon {
+  color: $tech-border;
+  text-shadow: 0 0 8px rgba(74, 144, 226, 0.3);
+}
+
+// 科技风格文本
+.tech-text {
+  color: $tech-text;
+  text-shadow: 0 0 2px rgba(44, 62, 80, 0.1);
+}
+
+.tech-text-secondary {
+  color: $tech-text-secondary;
+  text-shadow: 0 0 5px rgba(74, 144, 226, 0.2);
+}
+
+// 科技风格分隔线
+.tech-separator {
+  background: linear-gradient(90deg, transparent, $tech-border, transparent);
+  height: 1px;
+  margin: 15px 0;
+  opacity: 0.6;
+}
+
+// 科技风格滚动条
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(245, 248, 250, 0.8);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $tech-border;
+  border-radius: 4px;
+  box-shadow: 0 0 5px rgba(74, 144, 226, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: $tech-glow;
+}
+
+// 科技风格动画
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(74, 144, 226, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(74, 144, 226, 0.4); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+// 科技风格背景网格
+.tech-grid {
+  background-image: 
+    linear-gradient(rgba(74, 144, 226, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 144, 226, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center center;
+}
+
+// 科技风格玻璃效果
+.tech-glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 32px rgba(74, 144, 226, 0.1);
+}

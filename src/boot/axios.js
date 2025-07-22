@@ -1,4 +1,4 @@
-import { defineBoot } from '#q-app/wrappers'
+import {defineBoot} from '#q-app/wrappers'
 import axios from 'axios'
 
 // Be careful when using SSR for cross-request state pollution
@@ -7,9 +7,11 @@ import axios from 'axios'
 // good idea to move this instance creation inside of the
 // "export default () => {}" function below (which runs individually
 // for each client)
-const api = axios.create({ baseURL: 'https://api.example.com' })
 
-export default defineBoot(({ app }) => {
+
+const api = axios.create({baseURL: 'http://localhost:8082/api/v1'})
+
+export default defineBoot(({app}) => {
   // for use inside Vue files (Options API) through this.$axios and this.$api
 
   app.config.globalProperties.$axios = axios
@@ -21,4 +23,4 @@ export default defineBoot(({ app }) => {
   //       so you can easily perform requests against your app's API
 })
 
-export { api }
+export {api}

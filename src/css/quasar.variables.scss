@@ -12,14 +12,24 @@
 // to match your app's branding.
 // Tip: Use the "Theme Builder" on Quasar's documentation website.
 
-$primary   : #1976D2;
-$secondary : #26A69A;
-$accent    : #9C27B0;
+// 淡蓝色科技风格配色方案
+$primary   : #4A90E2; // 淡蓝色
+$secondary : #7BB3F0; // 浅蓝色
+$accent    : #64B5F6; // 天蓝色
 
-$dark      : #1D1D1D;
-$dark-page : #121212;
+$dark      : #F5F8FA; // 淡灰色
+$dark-page : #FFFFFF; // 白色
 
-$positive  : #21BA45;
-$negative  : #C10015;
-$info      : #31CCEC;
-$warning   : #F2C037;
+$positive  : #4CAF50; // 绿色
+$negative  : #F44336; // 红色
+$info      : #2196F3; // 蓝色
+$warning   : #FF9800; // 橙色
+
+// 自定义淡蓝色科技风格变量
+$tech-bg: #F5F8FA;
+$tech-card: #FFFFFF;
+$tech-border: #4A90E2;
+$tech-text: #2C3E50;
+$tech-text-secondary: #4A90E2;
+$tech-glow: #4A90E2;
+$tech-shadow: rgba(74, 144, 226, 0.2);
