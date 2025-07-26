@@ -3,9 +3,6 @@
     <div class="camera-header tech-text">实时监控</div>
     <div class="camera-container">
       <img src="http://192.168.1.108:8080/?action=stream" class="tech-camera-feed">
-      <div class="camera-overlay">
-        <div class="camera-status tech-text-secondary">● 在线</div>
-      </div>
     </div>
   </q-card>
 </template>
@@ -46,23 +43,6 @@
   border-radius: 8px;
   border: 1px solid rgba(74, 144, 226, 0.3);
   box-shadow: 0 4px 15px rgba(74, 144, 226, 0.2);
-}
-
-.camera-overlay {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(74, 144, 226, 0.5);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
-}
-
-.camera-status {
-  font-size: 12px;
-  color: #4A90E2;
-  text-shadow: 0 0 5px rgba(74, 144, 226, 0.2);
 }
 
 .tech-text {

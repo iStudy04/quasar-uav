@@ -11,7 +11,7 @@
     </q-header>
 
     <!-- 左侧菜单 -->
-    <q-drawer v-model="drawer" show-if-above bordered width="200" class="tech-drawer">
+    <q-drawer v-model="drawer" show-if-above bordered :width="200" class="tech-drawer">
       <q-list padding class="tech-menu">
         <q-item clickable v-ripple to="/" exact class="tech-menu-item">
           <q-item-section avatar><q-icon name="dashboard" class="tech-icon" /></q-item-section>
@@ -105,7 +105,7 @@ const drawer = ref(true)
   box-shadow: 0 4px 15px rgba(74, 144, 226, 0.2);
 }
 
-.tech-menu-item.router-link-active {
+.tech-menu-item {
   background: rgba(74, 144, 226, 0.2);
   border-left: 3px solid #4A90E2;
   box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);

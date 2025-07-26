@@ -1,37 +1,37 @@
 <template>
-
   <div
     class="joystick-area compass-area tech-compass"
-    ref="compassArea"
-    @mousedown.prevent="startMouseDrag"
-    @touchstart.prevent="startTouchDrag"
+    ref="baseElement"
+    @mousedown.prevent="onStart"
+    @touchstart.prevent="onStart"
   >
     <!-- 中心摇杆 -->
     <div
       class="joystick-stick compass-stick tech-stick"
+      ref="stickElement"
       :style="stickStyle"
     >
       <div class="stick-center">
-        <q-icon name="camera" size="md" color="white" class="tech-icon"/>
+        <q-icon name="camera" size="md" color="white" class="tech-icon" />
       </div>
     </div>
 
     <!-- 上下左右方向图标 -->
     <div class="direction-indicators">
       <div class="direction up tech-direction">
-        <q-icon name="keyboard_arrow_up" size="md" class="tech-icon"/>
+        <q-icon name="keyboard_arrow_up" size="md" class="tech-icon" />
       </div>
 
       <div class="direction down tech-direction">
-        <q-icon name="keyboard_arrow_down" size="md" class="tech-icon"/>
+        <q-icon name="keyboard_arrow_down" size="md" class="tech-icon" />
       </div>
 
       <div class="direction left tech-direction">
-        <q-icon name="keyboard_arrow_left" size="md" class="tech-icon"/>
+        <q-icon name="keyboard_arrow_left" size="md" class="tech-icon" />
       </div>
 
       <div class="direction right tech-direction">
-        <q-icon name="keyboard_arrow_right" size="md" class="tech-icon"/>
+        <q-icon name="keyboard_arrow_right" size="md" class="tech-icon" />
       </div>
     </div>
 
@@ -41,99 +41,106 @@
 </template>
 
 <script setup>
-import {ref, computed} from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineEmits } from 'vue'
 
-const compassArea = ref(null)
+const emit = defineEmits(['update'])
+
+const baseElement = ref(null)
+const stickElement = ref(null)
+
 const stickX = ref(0)
 const stickY = ref(0)
 const maxDistance = 40
-let center = {x: 0, y: 0}
-let touchId = null
-let dragging = false
+const EPSILON = 0.001
+let isDragging = false
+let center = { x: 0, y: 0 }
+
+const previousEmittedValues = { x: null, y: null }
 
 const stickStyle = computed(() => ({
   transform: `translate(${stickX.value}px, ${stickY.value}px)`
 }))
 
-const updateStick = (dx, dy) => {
-  const dist = Math.sqrt(dx * dx + dy * dy)
+const updateStickPosition = (dx, dy) => {
+  const distance = Math.sqrt(dx * dx + dy * dy)
   let fx = dx
   let fy = dy
-  if (dist > maxDistance) {
-    const angle = Math.atan2(dy, dx)
-    fx = Math.cos(angle) * maxDistance
-    fy = Math.sin(angle) * maxDistance
+
+  if (distance > maxDistance) {
+    fx = (dx / distance) * maxDistance
+    fy = (dy / distance) * maxDistance
   }
+
   stickX.value = fx
   stickY.value = fy
+  emitJoystickUpdate(fx, fy)
+}
 
-  // 控制台输出当前摇杆偏移位置
-  console.log(`摇杆偏移: X=${fx.toFixed(1)}, Y=${fy.toFixed(1)}`)
+const emitJoystickUpdate = (dx, dy) => {
+  const currentX = parseFloat((dx / maxDistance).toFixed(4))
+  const currentY = parseFloat((-dy / maxDistance).toFixed(4))
+
+  if (
+    Math.abs(currentX - previousEmittedValues.x) > EPSILON ||
+    Math.abs(currentY - previousEmittedValues.y) > EPSILON
+  ) {
+    previousEmittedValues.x = currentX
+    previousEmittedValues.y = currentY
+    emit('update', { x: currentX, y: currentY })
+  }
 }
 
 const resetStick = () => {
   stickX.value = 0
   stickY.value = 0
+  emitJoystickUpdate(0, 0)
 }
 
-const startTouchDrag = (e) => {
-  if (touchId !== null) return
-  const touch = e.changedTouches[0]
-  touchId = touch.identifier
+const onStart = (e) => {
+  e.preventDefault()
+  isDragging = true
 
-  const rect = compassArea.value.getBoundingClientRect()
+  const rect = baseElement.value.getBoundingClientRect()
   center = {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2
   }
 
-  const onMove = (eMove) => {
-    const moveTouch = [...eMove.changedTouches].find(t => t.identifier === touchId)
-    if (!moveTouch) return
-    const dx = moveTouch.clientX - center.x
-    const dy = moveTouch.clientY - center.y
-    updateStick(dx, dy)
+  const moveHandler = (moveEvent) => {
+    const touch = moveEvent.touches ? moveEvent.touches[0] : null
+    const clientX = touch ? touch.clientX : moveEvent.clientX
+    const clientY = touch ? touch.clientY : moveEvent.clientY
+    const dx = clientX - center.x
+    const dy = clientY - center.y
+    updateStickPosition(dx, dy)
   }
 
-  const onEnd = (eEnd) => {
-    const endTouch = [...eEnd.changedTouches].find(t => t.identifier === touchId)
-    if (!endTouch) return
+  const endHandler = () => {
+    isDragging = false
     resetStick()
-    touchId = null
-    window.removeEventListener('touchmove', onMove)
-    window.removeEventListener('touchend', onEnd)
+    document.removeEventListener('mousemove', moveHandler)
+    document.removeEventListener('mouseup', endHandler)
+    document.removeEventListener('mouseleave', endHandler)
+    document.removeEventListener('touchmove', moveHandler)
+    document.removeEventListener('touchend', endHandler)
+    document.removeEventListener('touchcancel', endHandler)
   }
 
-  window.addEventListener('touchmove', onMove)
-  window.addEventListener('touchend', onEnd)
+  document.addEventListener('mousemove', moveHandler)
+  document.addEventListener('mouseup', endHandler)
+  document.addEventListener('mouseleave', endHandler)
+  document.addEventListener('touchmove', moveHandler, { passive: false })
+  document.addEventListener('touchend', endHandler)
+  document.addEventListener('touchcancel', endHandler)
 }
 
-const startMouseDrag = (e) => {
-  if (dragging) return
-  dragging = true
+onMounted(() => {
+  emitJoystickUpdate(0, 0)
+})
 
-  const rect = compassArea.value.getBoundingClientRect()
-  center = {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2
-  }
-
-  const onMouseMove = (eMove) => {
-    const dx = eMove.clientX - center.x
-    const dy = eMove.clientY - center.y
-    updateStick(dx, dy)
-  }
-
-  const onMouseUp = () => {
-    dragging = false
-    resetStick()
-    window.removeEventListener('mousemove', onMouseMove)
-    window.removeEventListener('mouseup', onMouseUp)
-  }
-
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
-}
+onUnmounted(() => {
+  isDragging = false
+})
 </script>
 
 <style scoped>

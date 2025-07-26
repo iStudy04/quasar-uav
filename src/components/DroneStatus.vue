@@ -1,10 +1,12 @@
 <template>
   <q-card bordered class="tech-card q-pa-sm q-gutter-md">
     <!-- 标题 -->
-    <div class="text-subtitle1 text-weight-bold tech-text">设备状态</div>
-
-    <!-- 控制状态 -->
-    <q-input filled dense label="遥控状态" v-model="controlStatus" readonly class="tech-input" />
+    <div class="row items-center justify-between q-mb-xs">
+      <div class="text-subtitle1 text-weight-bold tech-text">设备状态</div>
+      <q-badge :color="isConnected ? 'positive' : 'negative'" outline>
+        {{ controlStatus }}
+      </q-badge>
+    </div>
 
     <!-- 设备信息 -->
     <div class="row items-center q-mt-sm">
@@ -20,37 +22,26 @@
     <!-- 控制按钮 -->
     <div class="row q-gutter-sm q-mt-sm">
       <q-btn label="飞行控制" outline color="primary" icon="flight" @click="flightControl" class="tech-btn"/>
-      <q-btn label="一键起飞" flat color="primary" class="tech-btn" />
-    </div>
-
-    <!-- 起飞参数 -->
-    <div class="tech-separator"></div>
-    <div class="text-subtitle2 q-mt-sm tech-text">起飞参数</div>
-
-    <div class="row q-col-gutter-sm">
-      <q-input filled dense v-model="altitudeSafe" label="安全离场高 (ALT)" type="number" suffix="m" class="col-6 tech-input" />
-      <q-input filled dense v-model="altitudeAGL" label="飞行作业高 (AGL)" type="number" suffix="m" class="col-6 tech-input" />
-    </div>
-    <div class="row q-col-gutter-sm q-mt-xs">
-      <q-input filled dense v-model="altitudeReturn" label="返航高 (ALT)" type="number" suffix="m" class="col-6 tech-input" />
-      <q-select
-        filled dense
-        v-model="failsafeAction"
-        :options="['返航', '悬停', '降落']"
-        label="失联作业"
-        class="col-6 tech-input"
+      <q-btn
+        v-if="!droneStatus.isFlying"
+        label="一键起飞"
+        flat
+        class="tech-btn"
+        @click="sendCommand('takeoff')"
+      />
+      <q-btn
+        v-else
+        label="一键降落"
+        flat
+        class="tech-btn"
+        @click="sendCommand('land')"
       />
     </div>
 
-    <!-- 状态信息 -->
     <div class="tech-separator"></div>
-    <div class="row items-center justify-around q-mt-md">
-      <div class="column items-center">
-        <q-icon name="network_check" color="blue-5" size="24px" class="tech-icon" />
-        <div class="text-caption tech-text">{{ gpsQuality }}</div>
-        <div class="text-caption text-grey tech-text-secondary">搜星质量</div>
-      </div>
 
+    <!-- 状态信息 -->
+    <div class="row items-center justify-around q-mt-md">
       <div class="column items-center">
         <q-icon name="battery_std" color="green-5" size="24px" class="tech-icon" />
         <div class="text-caption tech-text">{{ batteryLevel }}%</div>
@@ -59,16 +50,24 @@
 
       <div class="column items-center">
         <q-icon name="trending_flat" color="teal-6" size="24px" class="tech-icon" />
-        <div class="text-caption tech-text">{{ horizontalSpeed }} m/s</div>
+        <div class="text-caption tech-text">{{ speed }} m/s</div>
         <div class="text-caption text-grey tech-text-secondary">水平速度</div>
       </div>
 
       <div class="column items-center">
         <q-icon name="height" color="purple" size="24px" class="tech-icon" />
-        <div class="text-caption tech-text">{{ relativeHeight }} m</div>
+        <div class="text-caption tech-text">{{ altitude }} m</div>
         <div class="text-caption text-grey tech-text-secondary">相对高度</div>
       </div>
+
+      <div class="column items-center">
+        <q-icon name="navigation" color="orange-5" size="24px" class="tech-icon" />
+        <div class="text-caption tech-text">{{ heading }} °</div>
+        <div class="text-caption text-grey tech-text-secondary">机头朝向</div>
+      </div>
     </div>
+
+
     <div class="tech-separator"></div>
 
     <CameraView />
@@ -77,23 +76,28 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import CameraView from "components/CameraView.vue";
-import {useLayoutStore} from "stores/layout-store.js";
+import { useLayoutStore } from "stores/layout-store.js";
+import { useDroneStore } from "stores/drone.js";
 
-const controlStatus = ref('远程控制中')
-const droneName = 'Mavic 3'
-const mode = '手动控制中'
+const droneStore = useDroneStore();
+const { sendCommand } = droneStore;
 
-const altitudeSafe = ref(50)
-const altitudeAGL = ref(100)
-const altitudeReturn = ref(100)
-const failsafeAction = ref('返航')
+// 使用 storeToRefs 保持响应性
+const { selectedDrone, droneStatus, batteryLevel } = storeToRefs(droneStore);
 
-const gpsQuality = ref('33')
-const batteryLevel = ref(25)
-const horizontalSpeed = ref(0.0)
-const relativeHeight = ref(10.9)
+const isConnected = computed(() => droneStatus.value.isConnected);
+const controlStatus = computed(() => isConnected.value ? '远程控制中' : '连接已断开');
+const droneName = computed(() => selectedDrone.value?.name || '未选择无人机');
+const mode = computed(() => droneStatus.value.isFlying ? '飞行中' : '地面待命');
+
+// 为显示创建安全的计算属性
+const altitude = computed(() => droneStatus.value.altitude?.toFixed(1) || '0.0');
+const speed = computed(() => droneStatus.value.speed?.toFixed(1) || '0.0');
+const heading = computed(() => droneStatus.value.heading?.toFixed(0) || '0');
+
 
 const $layoutStore = useLayoutStore()
 

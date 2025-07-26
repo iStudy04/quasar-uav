@@ -17,10 +17,6 @@
           <input type="checkbox" v-model="showRoadNet" @change="toggleRoadNet" />
           路网
         </label>
-        <label>
-          <input type="checkbox" v-model="showTraffic" @change="toggleTraffic" />
-          路况
-        </label>
       </div>
     </div>
     <div id="container" class="tech-map"></div>
@@ -28,17 +24,76 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import AMapLoader from "@amap/amap-jsapi-loader";
+import { useDroneStore } from 'stores/drone';
 
 let map = null;
 let satelliteLayer = null;
 let roadNetLayer = null;
-let trafficLayer = null;
 
 const baseType = ref('normal'); // 'normal' or 'satellite'
-const showRoadNet = ref(true);
-const showTraffic = ref(false);
+const showRoadNet = ref(false);
+
+// --- Drone State ---
+const droneStore = useDroneStore();
+let droneMarker = null;
+
+
+function updateDroneOnMap(status, shouldRecenter = false) {
+  // 如果地图未初始化或无人机未连接，则不进行任何操作
+  if (!map || !status || !status.isConnected) {
+    // 如果无人机标记存在，则从地图上移除
+    if (droneMarker) {
+      map.remove(droneMarker);
+      droneMarker = null;
+    }
+    return;
+  }
+
+  const position = new window.AMap.LngLat(status.longitude, status.latitude);
+  const heading = status.heading;
+
+  if (!droneMarker) {
+    // 如果标记不存在，则创建新的标记
+    droneMarker = new window.AMap.Marker({
+      position: position,
+      // 使用一个SVG作为图标，可以方便地旋转
+      // 这是一个指向正北方的三角形
+      icon: new window.AMap.Icon({
+        size: new window.AMap.Size(40, 40),
+        // 使用一个指向性明确的锐利箭头/飞行器SVG图标
+        image: 'data:image/svg+xml;utf8,<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 0L124 768l388-194 388 194L512 0z" fill="%234A90E2" stroke="%23FFFFFF" stroke-width="40" /></svg>',
+        imageSize: new window.AMap.Size(40, 40)
+      }),
+      offset: new window.AMap.Pixel(-20, -20), // 图标中心点偏移
+      angle: heading // 设置初始角度
+    });
+    map.add(droneMarker);
+    console.log("无人机标记已创建");
+  } else {
+    // 如果标记已存在，则更新位置和角度
+    droneMarker.setPosition(position);
+    droneMarker.setAngle(heading);
+  }
+
+  // 如果需要，将地图视图移动到无人机位置
+  if (shouldRecenter) {
+    map.setZoomAndCenter(17, position, false, 500); // 动画时长500ms
+  }
+}
+
+// 4. 使用 watch 监听无人机状态变化
+watch(
+  () => droneStore.droneStatus,
+  (newStatus, oldStatus) => {
+    // 判断是否需要重新居中
+    // 条件：从“未连接”变为“已连接”
+    const justConnected = !oldStatus?.isConnected && newStatus?.isConnected;
+    updateDroneOnMap(newStatus, justConnected);
+  },
+  { deep: true } // 深度监听，因为 droneStatus 是一个对象
+);
 
 function setBaseType(type) {
   if (!map) return;
@@ -46,11 +101,9 @@ function setBaseType(type) {
   if (type === 'normal') {
     map.setLayers([new window.AMap.TileLayer()]);
     if (showRoadNet.value && roadNetLayer) map.add(roadNetLayer);
-    if (showTraffic.value && trafficLayer) map.add(trafficLayer);
   } else if (type === 'satellite') {
     map.setLayers([satelliteLayer]);
     if (showRoadNet.value && roadNetLayer) map.add(roadNetLayer);
-    if (showTraffic.value && trafficLayer) map.add(trafficLayer);
   }
 }
 
@@ -60,14 +113,6 @@ function toggleRoadNet() {
     map.add(roadNetLayer);
   } else {
     map.remove(roadNetLayer);
-  }
-}
-function toggleTraffic() {
-  if (!map) return;
-  if (showTraffic.value) {
-    map.add(trafficLayer);
-  } else {
-    map.remove(trafficLayer);
   }
 }
 
@@ -85,7 +130,7 @@ onMounted(() => {
   })
     .then((AMap) => {
       map = new AMap.Map("container", {
-        viewMode: "3D",
+        viewMode: "2D",
         terrain: true,
         zoom: 11,
         center: [118.78990242801399, 31.93709248681005],
@@ -109,11 +154,9 @@ onMounted(() => {
       // 初始化图层
       satelliteLayer = new AMap.TileLayer.Satellite();
       roadNetLayer = new AMap.TileLayer.RoadNet();
-      trafficLayer = new AMap.TileLayer.Traffic();
 
-      // 默认显示标准图层和路网
+      // 默认显示标准图层
       setBaseType('normal');
-      map.add(roadNetLayer);
 
       map.on('complete', () => {
         console.log('地图加载完成，地形已开启');
@@ -128,7 +171,6 @@ onUnmounted(() => {
   map?.destroy();
 });
 </script>
-
 
 <style>
 .custom-maptype {

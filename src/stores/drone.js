@@ -1,77 +1,274 @@
 // src/stores/drone.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { api } from 'boot/axios' // 引入Quasar的axios实例
 
-const WS_BASE_URL = 'ws://localhost:8082/ws/control' // WebSocket 地址
+// WebSocket 地址 - 与 single.html 保持一致
+const WS_URL = `ws://192.168.1.107:8081/ws/control`
 
 export const useDroneStore = defineStore('drone', () => {
-  // 当前连接的无人机ID
-  const currentDroneId = ref(null)
-  // 所有无人机列表
-  const clients = ref([])
+  // --- State ---
+  // 所有已连接的无人机列表，格式: [{ id, ip, name, ... }, ...]
+  const droneList = ref([])
+  // 当前用户在UI上选择的无人机ID
+  const selectedDroneId = ref(null)
+  // 后端通过WebSocket推送的原始遥测数据
+  const rawTelemetry = ref({}) // 存储所有无人机的最新遥测数据，以ID为key
+  // 系统日志
+  const logMessages = ref([])
+  // WebSocket实例
+  let websocket = null
 
-  // 后端返回的原始遥测数据
-  const rawTelemetry = ref(null)
+  // --- Getters (Computed Properties) ---
 
-  // 当前无人机状态 (基于 rawTelemetry 从 clients 中派生并映射字段)
+  // 当前选中的无人机对象
+  const selectedDrone = computed(() => {
+    if (!selectedDroneId.value || droneList.value.length === 0) {
+      return null
+    }
+    return droneList.value.find(d => d.id === selectedDroneId.value)
+  })
+
+  // 当前选中的无人机的状态 (从 rawTelemetry 派生)
   const droneStatus = computed(() => {
-    const telemetry = rawTelemetry.value
+    const telemetry = selectedDroneId.value ? rawTelemetry.value[selectedDroneId.value] : null;
 
-    // 当没有遥测数据时，返回一个默认的"未连接"状态对象
-    if (!telemetry) {
+    if (!selectedDrone.value || !telemetry) {
       return {
         isConnected: false,
         isFlying: false,
-        battery: 0,
+        battery: { percent: 0 }, // 保持数据结构一致
         altitude: 0,
         latitude: 0,
         longitude: 0,
         speed: 0,
         heading: 0,
-        address: '未知'
+        // 保持与 fast-api 一致的字段名
+        longtitude: 0,
+        height: 0,
+        head: 0,
       }
     }
 
-    // 如果后端没有直接提供 isFlying 状态，我们可以根据高度和速度进行推断
-    // 例如，高度大于1米且速度大于0.1米/秒，则认为在飞行
-    const inferredIsFlying = (telemetry.height > 1) && (telemetry.speed > 0.1)
-
+    // MSDK v5 使用 height, speed, head, longtitude, latitude
     return {
       isConnected: true,
-      // 优先使用后端提供的 isFlying 标志，如果不存在，则使用我们推断的状态
-      isFlying: typeof telemetry.isFlying === 'boolean' ? telemetry.isFlying : inferredIsFlying,
-      // 如果后端提供了 battery，则使用它，否则为 0
-      battery: telemetry.battery || 0,
-      altitude: telemetry.height || 0, // 映射后端 height 到前端 altitude
+      isFlying: (telemetry.height || 0) > 0.8, // 根据高度判断是否在飞行
+      battery: telemetry.battery_info?.batteries?.[0] || { percent: 0 },
+      altitude: telemetry.height || 0,
       latitude: telemetry.latitude || 0,
-      longitude: telemetry.longtitude || 0, // 映射后端 longtitude 到前端 longitude
+      longitude: telemetry.longtitude || 0,
       speed: telemetry.speed || 0,
-      heading: telemetry.head || 0, // 映射后端 head 到前端 heading
-      // 如果后端提供了 address，则使用它，否则为 '未知'
-      address: telemetry.address || '未知'
+      heading: telemetry.head || 0,
+      // 原始字段也一并提供，方便组件直接使用
+      ...telemetry,
     }
   })
 
-  // 云台状态 (暂未后端化，保持本地模拟)
-  const gimbalStatus = ref({
-    pitch: 0,
-    yaw: 0,
-    roll: 0
-  })
+  const isConnected = computed(() => !!selectedDrone.value)
+  const batteryLevel = computed(() => droneStatus.value.battery?.percent || 0)
 
-  // 计算属性 (保持不变，因为它们现在依赖于 droneStatus.value)
-  const isConnected = computed(() => droneStatus.value.isConnected)
-  const isFlying = computed(() => droneStatus.value.isFlying)
-  const batteryLevel = computed(() => droneStatus.value.battery)
+  // --- Actions (Methods) ---
+
+  // 添加日志的辅助函数
+  function addLog(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    logMessages.value.unshift(`[${timestamp}] ${message}`); // unshift 在数组开头添加
+    if (logMessages.value.length > 100) {
+      logMessages.value.pop(); // 保持日志数量不超过100条
+    }
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }
+
+  // 连接 WebSocket
+  function connectWebSocket() {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      addLog("WebSocket 已连接，无需重复连接。", 'warn');
+      return;
+    }
+
+    websocket = new WebSocket(WS_URL);
+
+    websocket.onopen = () => {
+      addLog("WebSocket 连接成功。", 'success');
+      // 连接成功后，可以主动请求一次无人机列表
+      fetchClients();
+    };
+
+    websocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const clientId = message.client_id;
+
+        // 根据消息类型处理数据
+        if (message.type === "telemetry_update") {
+          // 更新特定无人机的遥测数据
+          rawTelemetry.value = {
+            ...rawTelemetry.value,
+            [clientId]: {
+              ...rawTelemetry.value[clientId], // 保留旧数据
+              ...message.telemetry // 覆盖新数据
+            }
+          }
+        } else if (message.type === "battery_update") {
+          // 更新电池信息到遥测数据中
+          rawTelemetry.value = {
+            ...rawTelemetry.value,
+            [clientId]: {
+              ...rawTelemetry.value[clientId],
+              battery_info: message.battery_info
+            }
+          }
+        } else if (message.type === "client_update") {
+          addLog("收到客户端列表更新通知，正在刷新...");
+          fetchClients(); // 列表有变动，重新获取
+        }
+      } catch (error) {
+        addLog(`解析 WebSocket 消息失败: ${error}`, 'error');
+      }
+    };
+
+    websocket.onerror = (event) => {
+      addLog("WebSocket 发生错误。", 'error');
+    };
+
+    websocket.onclose = (event) => {
+      addLog(`WebSocket 连接已关闭。代码: ${event.code}`, 'warn');
+      websocket = null;
+      // 可以在这里设置一个5秒后重连的逻辑
+      setTimeout(connectWebSocket, 5000);
+    };
+  }
+
+  // 通过 HTTP API 获取无人机列表
+  async function fetchClients() {
+    try {
+      // 在Quasar中，api实例已经配置好了baseURL
+      const response = await api.get('/api/clients');
+      console.log(response);
+      droneList.value = response.data.clients || [];
+      if (droneList.value.length > 0 && !selectedDroneId.value) {
+        // 如果列表不为空且当前没有选中的无人机，则默认选中第一个
+        selectedDroneId.value = droneList.value[0].id;
+      }
+      if (droneList.value.length === 0) {
+        selectedDroneId.value = null;
+      }
+      addLog("成功获取无人机列表。");
+    } catch (error) {
+      addLog(`获取无人机列表失败: ${error.message}`, 'error');
+      droneList.value = [];
+      selectedDroneId.value = null;
+    }
+  }
+
+  // 发送控制指令 (与 combined_script.js 的 sendCommand 类似)
+  async function sendCommand(command, payload = {}) {
+    console.log("发送控制指令", command, payload);
+    const droneId = selectedDroneId.value;
+    if (!droneId) {
+      addLog("错误: 请先选择一个无人机！", 'error');
+      return;
+    }
+    addLog(`向 ${droneId} 发送 '${command}' 指令...`);
+    try {
+      // 使用 Quasar 的 axios 实例
+      const response = await api.post('/api/send-command', {
+        client_id: droneId,
+        command: command,
+        ...payload // 可以传递额外的数据
+      });
+      addLog(`指令成功: ${response.data.message}`, 'success');
+      return response.data;
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message;
+      addLog(`指令失败: ${errorMessage}`, 'error');
+      throw error;
+    }
+  }
+
+  // 发送摇杆数据 (通过WebSocket)
+  function sendJoystickData(data) {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+    if (!selectedDroneId.value) return;
+
+    const message = {
+      client_id: selectedDroneId.value,
+      payload: {
+        command: "vstick",
+        data: data
+      }
+    };
+    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
+      websocket.send(JSON.stringify(message));
+    }
+
+  }
+
+  // 发送摇杆数据 (通过WebSocket)
+  function sendJoystickDataSpeed(data) {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+    if (!selectedDroneId.value) return;
+
+    const message = {
+      client_id: selectedDroneId.value,
+      payload: {
+        command: "vstick_advance_v",
+        data: data
+      }
+    };
+    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
+      websocket.send(JSON.stringify(message));
+    }
+
+  }
+
+  // 发送摇杆数据 (通过WebSocket)
+  function sendJoystickDataPosition(data) {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+    if (!selectedDroneId.value) return;
+
+    const message = {
+      client_id: selectedDroneId.value,
+      payload: {
+        command: "vstick_advance_p",
+        data: data
+      }
+    };
+    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
+      websocket.send(JSON.stringify(message));
+    }
+
+  }
+
+  // 设置当前选中的无人机ID
+  function selectDrone(droneId) {
+    selectedDroneId.value = droneId;
+    addLog(`已选择无人机: ${droneId}`);
+  }
 
 
   return {
-    currentDroneId,
-    clients,
+    // State
+    droneList,
+    selectedDroneId,
+    rawTelemetry,
+    logMessages,
+
+    // Getters
+    selectedDrone,
     droneStatus,
-    gimbalStatus,
     isConnected,
-    isFlying,
-    batteryLevel
+    batteryLevel,
+
+    // Actions
+    addLog,
+    connectWebSocket,
+    fetchClients,
+    sendCommand,
+    sendJoystickData,
+    selectDrone,
+    sendJoystickDataSpeed,
+    sendJoystickDataPosition,
   }
 })
