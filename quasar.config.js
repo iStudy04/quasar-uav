@@ -67,10 +67,25 @@ export default defineConfig((/* ctx */) => {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
-      // https: true,
-      open: true // opens browser window automatically
+      // https: true, // 如果你的后端是https，则取消注释
+      open: true, // 自动打开浏览器
+      proxy: {
+        // 将所有以 /api 开头的请求代理到你的 FastAPI 服务器
+        '/api': {
+          target: 'http://127.0.0.1:8081', // 你的 FastAPI 后端地址
+          changeOrigin: true, // 必须设置为 true，否则后端可能会拒绝请求
+          // 如果你的API路径中不包含 /api，可以用 pathRewrite 去掉它
+          // pathRewrite: { '^/api': '' } // 例如 /api/clients -> /clients
+        },
+        '/ws': {
+          target: 'http://127.0.0.1:8081', // 你的 FastAPI 后端地址
+          changeOrigin: true, // 必须设置为 true，否则后端可能会拒绝请求
+          // 如果你的API路径中不包含 /api，可以用 pathRewrite 去掉它
+          // pathRewrite: { '^/api': '' } // 例如 /api/clients -> /clients
+        }
+        // 你可以添加更多代理规则，例如 /ws
+      }
     },
-
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
       config: {

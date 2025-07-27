@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 import { api } from 'boot/axios' // 引入Quasar的axios实例
 
 // WebSocket 地址 - 与 single.html 保持一致
-const WS_URL = `ws://192.168.1.107:8081/ws/control`
+const WS_URL = `ws://localhost:8081/ws/control`
 
 export const useDroneStore = defineStore('drone', () => {
   // --- State ---
@@ -32,7 +32,6 @@ export const useDroneStore = defineStore('drone', () => {
   // 当前选中的无人机的状态 (从 rawTelemetry 派生)
   const droneStatus = computed(() => {
     const telemetry = selectedDroneId.value ? rawTelemetry.value[selectedDroneId.value] : null;
-
     if (!selectedDrone.value || !telemetry) {
       return {
         isConnected: false,
@@ -111,8 +110,8 @@ export const useDroneStore = defineStore('drone', () => {
             }
           }
         } else if (message.type === "battery_update") {
-          // 更新电池信息到遥测数据中
-          rawTelemetry.value = {
+           // 更新电池信息到遥测数据中
+           rawTelemetry.value = {
             ...rawTelemetry.value,
             [clientId]: {
               ...rawTelemetry.value[clientId],
@@ -145,7 +144,7 @@ export const useDroneStore = defineStore('drone', () => {
     try {
       // 在Quasar中，api实例已经配置好了baseURL
       const response = await api.get('/api/clients');
-      console.log(response);
+      console.log("获取无人机列表成功:", response.data);
       droneList.value = response.data.clients || [];
       if (droneList.value.length > 0 && !selectedDroneId.value) {
         // 如果列表不为空且当前没有选中的无人机，则默认选中第一个
@@ -161,7 +160,6 @@ export const useDroneStore = defineStore('drone', () => {
       selectedDroneId.value = null;
     }
   }
-
   // 发送控制指令 (与 combined_script.js 的 sendCommand 类似)
   async function sendCommand(command, payload = {}) {
     console.log("发送控制指令", command, payload);

@@ -49,9 +49,18 @@
 
 <script setup>
 import { ref } from 'vue'
+import { onMounted } from 'vue'
+import { useDroneStore } from 'stores/drone'
 
 const drawer = ref(true)
+const droneStore = useDroneStore() // 获取store实例
+
+onMounted(() => {
+  // 当组件挂载后，开始连接WebSocket
+  droneStore.connectWebSocket()
+})
 </script>
+
 
 <style scoped>
 .tech-layout {
