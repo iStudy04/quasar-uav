@@ -81,7 +81,7 @@
                 label="发送位置指令"
                 color="primary"
                 :loading="isSending"
-                @click="sendPositionCommand"
+                @click="sendPositionCommand(pos)"
               />
               <q-btn
                 class="tech-btn"
@@ -190,9 +190,14 @@ const pos = ref({
 
 const isSending = ref(false)
 
-function sendPositionCommand() {
-  console.log(pos.value)
-  sendPosition(pos.value)
+function sendPositionCommand(pos) {
+
+  sendPosition({
+    x: pos.x,
+    y: pos.y,
+    z: pos.z,
+    yaw: pos.yaw
+  })
   isSending.value=true
   setTimeout(()=>isSending.value = false, 1000)
 }
