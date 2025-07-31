@@ -68,7 +68,7 @@ const getBatteryColor = (level) => {
 const curDroneCaption = computed(() => {
   const drone = droneList.value.find(d => d.id === selectedDroneId.value)
   if (!drone) return '未选择无人机'
-  return `${drone.ip}:${drone.port}`
+  return `${drone.ip}`
 })
 
 // 点击无人机后选中并折叠面板

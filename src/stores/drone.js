@@ -65,7 +65,7 @@ export const useDroneStore = defineStore('drone', () => {
   })
 
   const isConnected = computed(() => !!selectedDrone.value)
-  const batteryLevel = computed(() => droneStatus.value.battery?.percent || 0)
+  const batteryLevel = computed(() => droneStatus.value.battery?.percent.toFixed(2) || 0)
 
   // --- Actions (Methods) ---
 
@@ -185,6 +185,8 @@ export const useDroneStore = defineStore('drone', () => {
     }
   }
 
+  let stopFlag = false;
+
   // 发送摇杆数据 (通过WebSocket)
   function sendJoystickData(data) {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
@@ -197,47 +199,40 @@ export const useDroneStore = defineStore('drone', () => {
         data: data
       }
     };
+
     if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
       websocket.send(JSON.stringify(message));
+      stopFlag = true
+    }else{
+      if(stopFlag){
+        websocket.send(JSON.stringify(message));
+        stopFlag = false
+      }
     }
 
   }
 
-  // 发送摇杆数据 (通过WebSocket)
-  function sendJoystickDataSpeed(data) {
+  // 发送位置数据 (通过WebSocket)
+  function sendPosition(data) {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
     if (!selectedDroneId.value) return;
 
-    const message = {
+    const positionData = {
       client_id: selectedDroneId.value,
       payload: {
-        command: "vstick_advance_v",
-        data: data
+        type: 'position_control',
+        x: parseFloat(data.x),
+        y: parseFloat(data.y),
+        z: parseFloat(data.z),
+        yaw: parseFloat(data.yaw)
       }
     };
-    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
-      websocket.send(JSON.stringify(message));
+    if(positionData.payload.data.x!=0 || positionData.payload.data.y!=0 || positionData.payload.data.z!=0 || positionData.payload.data.yaw!=0){
+      websocket.send(JSON.stringify(positionData));
     }
 
   }
 
-  // 发送摇杆数据 (通过WebSocket)
-  function sendJoystickDataPosition(data) {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-    if (!selectedDroneId.value) return;
-
-    const message = {
-      client_id: selectedDroneId.value,
-      payload: {
-        command: "vstick_advance_p",
-        data: data
-      }
-    };
-    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
-      websocket.send(JSON.stringify(message));
-    }
-
-  }
 
   // 设置当前选中的无人机ID
   function selectDrone(droneId) {
@@ -266,7 +261,6 @@ export const useDroneStore = defineStore('drone', () => {
     sendCommand,
     sendJoystickData,
     selectDrone,
-    sendJoystickDataSpeed,
-    sendJoystickDataPosition,
+    sendPosition
   }
 })

@@ -1,85 +1,132 @@
 <template>
   <div class="row q-pa-sm justify-between tech-control-panel">
-    <!-- 左侧控制面板 -->
-    <!-- <div class="column items-center">
-      <div class="text-h6 text-left q-mb-sm self-start tech-text">无人机镜头</div>
+    <div>
+      <q-tabs
+        v-model="tab"
+        dense
+        class="text-grey"
+        active-color="primary"
+        indicator-color="primary"
+        align="justify"
+        narrow-indicator
+      >
+        <q-tab name="joystick" label="摇杆控制"/>
+        <q-tab name="position" label="坐标控制"/>
+        <q-tab name="point" label="打点控制"/>
+      </q-tabs>
 
-      <div class="row q-pa-md items-center q-gutter-lg">
+      <q-separator/>
 
-        <CompassControl class="q-mb-md"/>
-        <div>
-          <div class="row">
-            <q-btn label="回正" color="primary" class="q-ma-xs tech-btn"/>
-            <q-btn label="向下" color="primary" class="q-ma-xs tech-btn"/>
+      <q-tab-panels v-model="tab" animated>
+        <q-tab-panel name="joystick">
+          <div class="column items-center">
+            <div class="row q-pa-md items-center q-gutter-lg">
+              <CompassControl class="q-mb-md"
+                              @update="updateLeftJoystick"/>
+
+              <div class="column q-gutter-sm">
+                <q-btn label="返航" color="primary" class="tech-btn"
+                       @click="sendCommand('go_home')"
+                       :disable="!droneStatus.isFlying"
+                />
+
+                <q-toggle
+                  v-model="rosControlEnabled"
+                  label="ROS控制"
+                  color="primary"
+                  class="q-mt-sm"
+                  @update:model-value="onRosControlChange"
+                />
+                <q-toggle
+                  v-model="joystickEnabled"
+                  label="启用摇杆"
+                  color="primary"
+                  class="q-mt-sm"
+                  @update:model-value="onJoystickToggle"
+                />
+              </div>
+
+              <CompassControl
+                class="q-mb-md"
+                @update="updateRightJoystick"
+              />
+
+            </div>
+
           </div>
-          <div class="row">
-            <q-btn label="录像" color="primary" class="q-ma-xs tech-btn"/>
-            <q-btn label="拍照" color="primary" class="q-ma-xs tech-btn"/>
+        </q-tab-panel>
+
+        <q-tab-panel name="position">
+          <div class="q-pa-xs" style="max-width: 400px;">
+            <!-- 输入框区域 -->
+            <div class="row q-col-gutter-sm">
+              <div class="col-6">
+                <q-input v-model.number="pos.x" label="X (m)" filled dense/>
+              </div>
+              <div class="col-6">
+                <q-input v-model.number="pos.y" label="Y (m)" filled/>
+              </div>
+              <div class="col-6">
+                <q-input v-model.number="pos.z" label="Z (m)" filled/>
+              </div>
+              <div class="col-6">
+                <q-input v-model.number="pos.yaw" label="Yaw (°)" filled/>
+              </div>
+            </div>
+
+            <!-- 按钮区域 -->
+            <div class="row justify-between q-mt-sm">
+              <q-btn
+                class="tech-btn"
+                label="发送位置指令"
+                color="primary"
+                :loading="isSending"
+                @click="sendPositionCommand"
+              />
+              <q-btn
+                class="tech-btn"
+                label="重置"
+                color="secondary"
+                flat
+                @click="onReset"/>
+            </div>
           </div>
-        </div>
+        </q-tab-panel>
 
-      </div>
-    </div> -->
-
-    <!-- 右侧控制面板 -->
-    <div class="column items-center">
-
-      <div class="row q-pa-md items-center q-gutter-lg">
-
-        <CompassControl class="q-mb-md"
-        @update="updateLeftJoystick" />
-
-        <div class="column q-gutter-sm">
-          <q-btn label="返航" color="primary" class="tech-btn"
-            @click="sendCommand('go_home')"
-            :disable="!droneStatus.isFlying"
-          />
-
-          <q-toggle
-            v-model="rosControlEnabled"
-            label="ROS控制"
-            color="primary"
-            class="q-mt-sm"
-            :disable="joystickEnabled"
-            @update:model-value="onRosControlChange"
-          />
-          <q-toggle
-            v-model="joystickEnabled"
-            label="启用摇杆"
-            color="primary"
-            class="q-mt-sm"
-            :disable="rosControlEnabled"
-            @update:model-value="onJoystickToggle"
-          />
-        </div>
-
-        <CompassControl class="q-mb-md"
-        @update="updateRightJoystick" />
-
-      </div>
-
+        <q-tab-panel name="point">
+          <div class="row items-center justify-around q-mt-sm">
+            <q-btn
+              class="tech-btn"
+              label="前往目标点"
+              color="primary"
+              @click=""/>
+          </div>
+        </q-tab-panel>
+      </q-tab-panels>
     </div>
   </div>
 
 </template>
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue' // 从 Vue 引入响应式和生命周期钩子
-import { useDroneStore } from 'stores/drone' // 引入无人机数据存储
-import { storeToRefs } from 'pinia'
+import {ref, onMounted, onUnmounted} from 'vue' // 从 Vue 引入响应式和生命周期钩子
+import {useDroneStore} from 'stores/drone' // 引入无人机数据存储
+import {storeToRefs} from 'pinia'
 
 import CompassControl from "./CompassControl.vue";
 
 const droneStore = useDroneStore()
 
-const { droneStatus } = storeToRefs(droneStore)
-const { sendJoystickData, sendCommand } = droneStore
+const {droneStatus} = storeToRefs(droneStore)
+const {sendJoystickData, sendCommand, sendPosition} = droneStore
+
+const tab = ref("joystick")
 
 // 使用 ref 来存储摇杆的最新值
-const leftJoystickValues = ref({ x: 0, y: 0 })
-const rightJoystickValues = ref({ x: 0, y: 0 })
+const leftJoystickValues = ref({x: 0, y: 0})
+const rightJoystickValues = ref({x: 0, y: 0})
 
 const rosControlEnabled = ref(false)
-const joystickEnabled = ref(true)
+const joystickEnabled = ref(false)
 
 
 // 定时器ID，用于周期性发送摇杆数据
@@ -101,10 +148,10 @@ onMounted(() => {
     // left stick (虚拟摇杆的左侧): 高度(y) / 旋转(x) -> MSDK V5 的 right stick
     // right stick (虚拟摇杆的右侧): 前进(y) / 左右(x) -> MSDK V5 的 left stick
     sendJoystickData({
-      left_stick_x: leftJoystickValues.value.x,
-      left_stick_y: leftJoystickValues.value.y,
-      right_stick_x: rightJoystickValues.value.x,
-      right_stick_y: rightJoystickValues.value.y,
+      left_stick_x: rightJoystickValues.value.x,
+      left_stick_y: rightJoystickValues.value.y,
+      right_stick_x: leftJoystickValues.value.x,
+      right_stick_y: leftJoystickValues.value.y,
     })
   }, 100); // 每 100ms 发送一次 (10Hz)，这是实时控制的常用频率
 });
@@ -133,6 +180,30 @@ const onJoystickToggle = (value) => {
   }
 }
 
+// 坐标控制
+const pos = ref({
+  x: 0,
+  y: 0,
+  z: 0,
+  yaw: 0
+})
+
+const isSending = ref(false)
+
+function sendPositionCommand() {
+  console.log(pos.value)
+  sendPosition(pos.value)
+  isSending.value=true
+  setTimeout(()=>isSending.value = false, 1000)
+}
+
+function onReset(){
+  pos.value.x = 0
+  pos.value.y = 0
+  pos.value.z = 0
+  pos.value.yaw = 0
+}
+
 </script>
 
 <style scoped>
@@ -140,9 +211,8 @@ const onJoystickToggle = (value) => {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 248, 250, 0.95) 100%);
   border: 1px solid #4A90E2;
   border-radius: 12px;
-  box-shadow:
-    0 8px 32px rgba(74, 144, 226, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px rgba(74, 144, 226, 0.15),
+  inset 0 1px 0 rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;

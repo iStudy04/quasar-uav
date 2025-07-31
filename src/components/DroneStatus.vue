@@ -96,7 +96,7 @@ const mode = computed(() => droneStatus.value.isFlying ? '飞行中' : '地面�
 // 为显示创建安全的计算属性
 const altitude = computed(() => droneStatus.value.altitude?.toFixed(1) || '0.0');
 const speed = computed(() => droneStatus.value.speed?.toFixed(1) || '0.0');
-const heading = computed(() => droneStatus.value.heading?.toFixed(0) || '0');
+const heading = computed(() => droneStatus.value.heading?.toFixed(3) || '0');
 
 
 const $layoutStore = useLayoutStore()

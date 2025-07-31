@@ -3,6 +3,8 @@
 
 import { defineConfig } from '#q-app/wrappers'
 
+const baseUrl = 'http://localhost:8081'
+
 export default defineConfig((/* ctx */) => {
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
@@ -72,13 +74,13 @@ export default defineConfig((/* ctx */) => {
       proxy: {
         // 将所有以 /api 开头的请求代理到你的 FastAPI 服务器
         '/api': {
-          target: 'http://127.0.0.1:8081', // 你的 FastAPI 后端地址
+          target: baseUrl, // 你的 FastAPI 后端地址
           changeOrigin: true, // 必须设置为 true，否则后端可能会拒绝请求
           // 如果你的API路径中不包含 /api，可以用 pathRewrite 去掉它
           // pathRewrite: { '^/api': '' } // 例如 /api/clients -> /clients
         },
         '/ws': {
-          target: 'http://127.0.0.1:8081', // 你的 FastAPI 后端地址
+          target: baseUrl, // 你的 FastAPI 后端地址
           changeOrigin: true, // 必须设置为 true，否则后端可能会拒绝请求
           // 如果你的API路径中不包含 /api，可以用 pathRewrite 去掉它
           // pathRewrite: { '^/api': '' } // 例如 /api/clients -> /clients
