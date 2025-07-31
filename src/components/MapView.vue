@@ -126,6 +126,8 @@ function toggleRoadNet() {
 
 let customMarker = null; // 单个点标记，重复点击时替换
 
+const {lastCalculatedPosition ,originPosition} = droneStore
+
 onMounted(() => {
   window._AMapSecurityConfig = {
     securityJsCode: "0bb2d9d601a8aa958498a59a62125596"
@@ -194,6 +196,23 @@ onMounted(() => {
 
         map.add(customMarker);
 
+        // 1. 拿到目标经纬度
+        lastCalculatedPosition.lng = lnglat.getLng()
+        lastCalculatedPosition.lat = lnglat.getLat()
+
+        // 2. 使用【真实GPS坐标】进行距离计算
+        const relativePos = calculateDistanceInMeters(
+          originPosition.lat,
+          originPosition.lng,
+          lastCalculatedPosition.lat, // 使用转换后的真实纬度
+          lastCalculatedPosition.lng  // 使用转换后的真实经度
+        );
+
+        // 3. 保存到lastCalculatedPosition中，用于发送指令
+        lastCalculatedPosition.x = relativePos.x;
+        lastCalculatedPosition.y = relativePos.y;
+
+        console.log(lastCalculatedPosition)
         console.log("打点坐标：", lnglat.getLng(), lnglat.getLat());
       });
     })
@@ -207,6 +226,24 @@ onMounted(() => {
 onUnmounted(() => {
   map?.destroy();
 });
+
+// 将经纬度差转换为米
+function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
+  const degToRad = Math.PI / 180.0;
+  const EARTH_RADIUS = 6378137.0;
+
+  const dLat = (lat2 - lat1) * degToRad;
+  const dLng = (lng2 - lng1) * degToRad;
+
+  const meanLat = (lat1 + lat2) / 2.0 * degToRad;
+
+  const x = EARTH_RADIUS * dLng * Math.cos(meanLat); // 经度方向
+  const y = EARTH_RADIUS * dLat;                     // 纬度方向
+
+  return { x, y }; // 单位：米
+}
+
+
 </script>
 
 <style scoped>

@@ -99,7 +99,12 @@
               class="tech-btn"
               label="前往目标点"
               color="primary"
-              @click=""/>
+              @click="sendTargetCommand"/>
+            <q-btn
+              class="tech-btn"
+              label="设置原点坐标"
+              color="secondary"
+              @click="sendOriginCommand"/>
           </div>
         </q-tab-panel>
       </q-tab-panels>
@@ -113,11 +118,12 @@ import {useDroneStore} from 'stores/drone' // 引入无人机数据存储
 import {storeToRefs} from 'pinia'
 
 import CompassControl from "./CompassControl.vue";
+import { Notify } from 'quasar'
 
 const droneStore = useDroneStore()
 
 const {droneStatus} = storeToRefs(droneStore)
-const {sendJoystickData, sendCommand, sendPosition} = droneStore
+const {sendJoystickData, sendCommand, sendPosition, sendTarget} = droneStore
 
 const tab = ref("joystick")
 
@@ -180,7 +186,7 @@ const onJoystickToggle = (value) => {
   }
 }
 
-// 坐标控制
+// 相对坐标控制
 const pos = ref({
   x: 0,
   y: 0,
@@ -191,13 +197,7 @@ const pos = ref({
 const isSending = ref(false)
 
 function sendPositionCommand(pos) {
-
-  sendPosition({
-    x: pos.x,
-    y: pos.y,
-    z: pos.z,
-    yaw: pos.yaw
-  })
+  sendPosition(pos)
   isSending.value=true
   setTimeout(()=>isSending.value = false, 1000)
 }
@@ -208,6 +208,26 @@ function onReset(){
   pos.value.z = 0
   pos.value.yaw = 0
 }
+
+
+// 地图打点控制
+const {lastCalculatedPosition, originPosition, sendOrigin} = useDroneStore()
+
+function sendOriginCommand(){
+  console.log(lastCalculatedPosition)
+  originPosition.lng = lastCalculatedPosition.lng
+  originPosition.lat = lastCalculatedPosition.lat
+  sendOrigin(originPosition)
+}
+
+function sendTargetCommand(){
+  if(lastCalculatedPosition.lng == '' || lastCalculatedPosition.lng == ''){
+    Notify.create('请先打点!')
+  }
+  sendTarget(lastCalculatedPosition)
+}
+
+
 
 </script>
 

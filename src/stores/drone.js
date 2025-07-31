@@ -1,7 +1,7 @@
 // src/stores/drone.js
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { api } from 'boot/axios' // 引入Quasar的axios实例
+import {defineStore} from 'pinia'
+import {ref, computed} from 'vue'
+import {api} from 'boot/axios' // 引入Quasar的axios实例
 
 // WebSocket 地址 - 与 single.html 保持一致
 const WS_URL = `ws://localhost:8081/ws/control`
@@ -36,7 +36,7 @@ export const useDroneStore = defineStore('drone', () => {
       return {
         isConnected: false,
         isFlying: false,
-        battery: { percent: 0 }, // 保持数据结构一致
+        battery: {percent: 0}, // 保持数据结构一致
         altitude: 0,
         latitude: 0,
         longitude: 0,
@@ -53,7 +53,7 @@ export const useDroneStore = defineStore('drone', () => {
     return {
       isConnected: true,
       isFlying: (telemetry.height || 0) > 0.8, // 根据高度判断是否在飞行
-      battery: telemetry.battery_info?.batteries?.[0] || { percent: 0 },
+      battery: telemetry.battery_info?.batteries?.[0] || {percent: 0},
       altitude: telemetry.height || 0,
       latitude: telemetry.latitude || 0,
       longitude: telemetry.longtitude || 0,
@@ -110,8 +110,8 @@ export const useDroneStore = defineStore('drone', () => {
             }
           }
         } else if (message.type === "battery_update") {
-           // 更新电池信息到遥测数据中
-           rawTelemetry.value = {
+          // 更新电池信息到遥测数据中
+          rawTelemetry.value = {
             ...rawTelemetry.value,
             [clientId]: {
               ...rawTelemetry.value[clientId],
@@ -160,6 +160,7 @@ export const useDroneStore = defineStore('drone', () => {
       selectedDroneId.value = null;
     }
   }
+
   // 发送控制指令 (与 combined_script.js 的 sendCommand 类似)
   async function sendCommand(command, payload = {}) {
     console.log("发送控制指令", command, payload);
@@ -200,11 +201,11 @@ export const useDroneStore = defineStore('drone', () => {
       }
     };
 
-    if(message.payload.data.left_stick_x!=0 || message.payload.data.left_stick_y!=0 || message.payload.data.right_stick_x!=0 || message.payload.data.right_stick_y!=0){
+    if (message.payload.data.left_stick_x != 0 || message.payload.data.left_stick_y != 0 || message.payload.data.right_stick_x != 0 || message.payload.data.right_stick_y != 0) {
       websocket.send(JSON.stringify(message));
       stopFlag = true
-    }else{
-      if(stopFlag){
+    } else {
+      if (stopFlag) {
         websocket.send(JSON.stringify(message));
         stopFlag = false
       }
@@ -227,10 +228,7 @@ export const useDroneStore = defineStore('drone', () => {
         yaw: parseFloat(data.yaw)
       }
     };
-    if(positionData.payload.data.x!=0 || positionData.payload.data.y!=0 || positionData.payload.data.z!=0 || positionData.payload.data.yaw!=0){
-      websocket.send(JSON.stringify(positionData));
-    }
-
+    websocket.send(JSON.stringify(positionData));
   }
 
 
@@ -240,6 +238,50 @@ export const useDroneStore = defineStore('drone', () => {
     addLog(`已选择无人机: ${droneId}`);
   }
 
+  const lastCalculatedPosition = ref({
+    x: '',    // 相对坐标
+    y: '',    // 相对坐标
+    lat: '', // 存储真实纬度
+    lng: ''  // 存储真实经度
+  })
+
+  const originPosition = ref({
+    lat: '',
+    lng: ''
+  })
+
+  function sendOrigin(data) {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+    if (!selectedDroneId.value) return;
+    if (data == '' || data.lat == '' || data.lng == '') return;
+
+    const message = {
+      client_id: 'all',
+      payload: {
+        command: 'set_ros_origin',
+        lat: parseFloat(data.lat),
+        lon: parseFloat(data.lng)
+      }
+    }
+    console.log(message)
+    websocket.send(JSON.stringify(message));
+  }
+
+  function sendTarget(data) {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+    if (!selectedDroneId.value) return;
+    const message = {
+      client_id: selectedDroneId.value,
+      payload: {
+        command: 'set_ros_target',
+        x: parseFloat(data.y),
+        y: parseFloat(-data.x),
+        z: 0,
+      }
+    }
+    console.log(message)
+    websocket.send(JSON.stringify(message));
+  }
 
   return {
     // State
@@ -247,6 +289,8 @@ export const useDroneStore = defineStore('drone', () => {
     selectedDroneId,
     rawTelemetry,
     logMessages,
+    lastCalculatedPosition,
+    originPosition,
 
     // Getters
     selectedDrone,
@@ -261,6 +305,8 @@ export const useDroneStore = defineStore('drone', () => {
     sendCommand,
     sendJoystickData,
     selectDrone,
-    sendPosition
+    sendPosition,
+    sendOrigin,
+    sendTarget,
   }
 })
