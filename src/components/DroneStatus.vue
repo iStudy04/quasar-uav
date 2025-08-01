@@ -11,7 +11,7 @@
     <!-- 设备信息 -->
     <div class="row items-center q-mt-sm">
       <q-avatar size="40px" class="q-mr-sm tech-avatar">
-        <q-icon name="airplanemode_active" size="32px" color="blue" class="tech-icon" />
+        <q-icon name="airplanemode_active" size="32px" color="blue" class="tech-icon"/>
       </q-avatar>
       <div>
         <div class="text-subtitle2 text-weight-medium tech-text">{{ droneName }}</div>
@@ -43,25 +43,25 @@
     <!-- 状态信息 -->
     <div class="row items-center justify-around q-mt-md">
       <div class="column items-center">
-        <q-icon name="battery_std" color="green-5" size="24px" class="tech-icon" />
+        <q-icon name="battery_std" color="green-5" size="24px" class="tech-icon"/>
         <div class="text-caption tech-text">{{ batteryLevel }}%</div>
         <div class="text-caption text-grey tech-text-secondary">电池电量</div>
       </div>
 
       <div class="column items-center">
-        <q-icon name="trending_flat" color="teal-6" size="24px" class="tech-icon" />
+        <q-icon name="trending_flat" color="teal-6" size="24px" class="tech-icon"/>
         <div class="text-caption tech-text">{{ speed }} m/s</div>
         <div class="text-caption text-grey tech-text-secondary">水平速度</div>
       </div>
 
       <div class="column items-center">
-        <q-icon name="height" color="purple" size="24px" class="tech-icon" />
+        <q-icon name="height" color="purple" size="24px" class="tech-icon"/>
         <div class="text-caption tech-text">{{ altitude }} m</div>
         <div class="text-caption text-grey tech-text-secondary">相对高度</div>
       </div>
 
       <div class="column items-center">
-        <q-icon name="navigation" color="orange-5" size="24px" class="tech-icon" />
+        <q-icon name="navigation" color="orange-5" size="24px" class="tech-icon"/>
         <div class="text-caption tech-text">{{ heading }} °</div>
         <div class="text-caption text-grey tech-text-secondary">机头朝向</div>
       </div>
@@ -70,38 +70,46 @@
 
     <div class="tech-separator"></div>
 
-    <CameraView />
+    <CameraView :ip="curDroneIp"/>
+
 
   </q-card>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { storeToRefs } from 'pinia'
+import {computed} from 'vue'
+import {storeToRefs} from 'pinia'
 import CameraView from "components/CameraView.vue";
-import { useLayoutStore } from "stores/layout-store.js";
-import { useDroneStore } from "stores/drone.js";
+import {useLayoutStore} from "stores/layout-store.js";
+import {useDroneStore} from "stores/drone.js";
 
 const droneStore = useDroneStore();
-const { sendCommand } = droneStore;
+const {sendCommand} = droneStore;
+const {droneList, selectedDroneId } = storeToRefs(droneStore)
 
 // 使用 storeToRefs 保持响应性
-const { selectedDrone, droneStatus, batteryLevel } = storeToRefs(droneStore);
+const {selectedDrone, droneStatus, batteryLevel} = storeToRefs(droneStore);
+
+const curDroneIp = computed(() => {
+  const drone = droneList.value.find(d => d.id === selectedDroneId.value)
+  if (!drone) return ''
+  return `${drone.ip}`
+})
 
 const isConnected = computed(() => droneStatus.value.isConnected);
 const controlStatus = computed(() => isConnected.value ? '远程控制中' : '连接已断开');
-const droneName = computed(() => selectedDrone.value?.name || '未选择无人机');
+const droneName = computed(() => selectedDrone.value?.id || '未选择无人机');
 const mode = computed(() => droneStatus.value.isFlying ? '飞行中' : '地面待命');
 
 // 为显示创建安全的计算属性
 const altitude = computed(() => droneStatus.value.altitude?.toFixed(1) || '0.0');
 const speed = computed(() => droneStatus.value.speed?.toFixed(1) || '0.0');
-const heading = computed(() => droneStatus.value.heading?.toFixed(3) || '0');
+const heading = computed(() => droneStatus.value.heading?.toFixed(1) || '0');
 
 
 const $layoutStore = useLayoutStore()
 
-function flightControl(){
+function flightControl() {
   $layoutStore.controlPanelShow = !$layoutStore.controlPanelShow
 }
 </script>

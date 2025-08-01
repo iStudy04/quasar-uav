@@ -1,25 +1,48 @@
 <template>
   <q-page class="q-pa-md">
     <q-card>
-      <q-card-section>
-        <div class="text-h6">无人机连接管理</div>
-        <div class="text-subtitle2 text-grey-7">请手动确认是否允许新连接的无人机加入系统</div>
+      <q-card-section class="row items-center justify-between">
+        <div class="text-h6">无人机管理</div>
+        <q-btn flat icon="refresh" label="刷新" @click="handleRefresh" />
       </q-card-section>
 
       <q-separator />
 
       <q-card-section>
         <q-table
-          :rows="pendingClients"
+          :rows="droneStore.droneList"
           :columns="columns"
           row-key="id"
-          flat bordered dense
-          no-data-label="暂无待确认连接的无人机"
+          flat
+          bordered
+          hide-bottom
         >
-          <template v-slot:body-cell-action="props">
-            <q-td>
-              <q-btn color="primary" size="sm" @click="confirmConnection(props.row)">确认</q-btn>
-              <q-btn color="negative" size="sm" flat class="q-ml-sm" @click="rejectConnection(props.row)">拒绝</q-btn>
+          <template v-slot:body-cell-actions="props">
+            <q-td align="right">
+              <q-btn
+                v-if="!confirmedMap[props.row.id]"
+                flat
+                color="primary"
+                icon="check"
+                label="确认"
+                @click="confirmDrone(props.row.id)"
+              />
+              <q-btn
+                v-if="!confirmedMap[props.row.id]"
+                flat
+                color="negative"
+                icon="close"
+                label="拒绝"
+                @click="rejectDrone(props.row.id)"
+              />
+              <q-btn
+                v-if="confirmedMap[props.row.id]"
+                flat
+                color="warning"
+                icon="link_off"
+                label="断开连接"
+                @click="disconnectDrone(props.row.id)"
+              />
             </q-td>
           </template>
         </q-table>
@@ -29,57 +52,72 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { useDroneStore } from 'stores/drone'
-import { api } from 'boot/axios'
+import { onMounted, reactive } from 'vue'
+import { useDroneStore } from 'src/stores/drone'
+import { useQuasar } from 'quasar'
 
 const droneStore = useDroneStore()
+const $q = useQuasar()
 
-const pendingClients = ref([])
-
+// 表格列定义
 const columns = [
-  { name: 'id', label: '客户端ID', align: 'left', field: 'id' },
+  { name: 'id', label: 'ID', align: 'left', field: 'id' },
+  { name: 'name', label: '名称', align: 'left', field: 'name' },
   { name: 'ip', label: 'IP地址', align: 'left', field: 'ip' },
-  { name: 'name', label: '设备名称', align: 'left', field: 'name' },
-  { name: 'action', label: '操作', align: 'center' }
+  {
+    name: 'actions',
+    label: '操作',
+    align: 'right',
+    field: 'actions',
+    sortable: false
+  }
 ]
 
-// 获取待确认的无人机连接列表
-async function fetchPendingClients() {
-  try {
-    const res = await api.get('/api/pending-clients')
-    pendingClients.value = res.data.clients || []
-  } catch (e) {
-    console.error('获取待确认连接失败:', e.message)
-  }
+// 本地确认状态映射表（不依赖 drone.js）
+const confirmedMap = reactive({})
+
+// 页面加载时自动拉取列表
+onMounted(() => {
+  droneStore.fetchClients()
+})
+
+// 确认：设置本地状态
+function confirmDrone(id) {
+  confirmedMap[id] = true
+  $q.notify({
+    type: 'positive',
+    message: `已确认无人机 ${id}`
+  })
 }
 
-async function confirmConnection(client) {
-  try {
-    await api.post('/api/approve-client', { client_id: client.id })
-    droneStore.addLog(`已确认连接无人机 ${client.id}`)
-    pendingClients.value = pendingClients.value.filter(c => c.id !== client.id)
-    await droneStore.fetchClients() // 更新无人机列表
-  } catch (e) {
-    console.error('确认失败:', e.message)
-  }
+// 拒绝：从 droneList 中移除
+function rejectDrone(id) {
+  droneStore.droneList = droneStore.droneList.filter(d => d.id !== id)
+  delete confirmedMap[id]
+  $q.notify({
+    type: 'warning',
+    message: `已拒绝无人机 ${id}`
+  })
 }
 
-async function rejectConnection(client) {
-  try {
-    await api.post('/api/reject-client', { client_id: client.id })
-    droneStore.addLog(`已拒绝连接无人机 ${client.id}`)
-    pendingClients.value = pendingClients.value.filter(c => c.id !== client.id)
-  } catch (e) {
-    console.error('拒绝失败:', e.message)
-  }
+// 断开连接：重置为“确认 / 拒绝”状态
+function disconnectDrone(id) {
+  confirmedMap[id] = false
+  $q.notify({
+    type: 'info',
+    message: `已断开与无人机 ${id} 的连接，可重新确认或拒绝`
+  })
 }
 
-onMounted(fetchPendingClients)
+// 刷新：清除所有确认状态并重新拉取
+function handleRefresh() {
+  Object.keys(confirmedMap).forEach(key => delete confirmedMap[key])
+  droneStore.fetchClients()
+}
 </script>
 
 <style scoped>
-.q-btn {
-  min-width: 64px;
+.q-table__middle {
+  font-size: 14px;
 }
 </style>

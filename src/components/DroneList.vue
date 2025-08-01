@@ -29,7 +29,7 @@
           >
             <q-item-section>
               <q-item-label>{{ drone.name || drone.id }}</q-item-label>
-              <q-item-label caption>{{ drone.ip }}:{{ drone.port }}</q-item-label>
+              <q-item-label caption>{{ drone.ip }}</q-item-label>
             </q-item-section>
 
             <q-item-section side>
