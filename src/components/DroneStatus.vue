@@ -27,7 +27,7 @@
         label="一键起飞"
         flat
         class="tech-btn"
-        @click="sendCommand('takeoff')"
+        @click="takeoffWithOrigin"
       />
       <q-btn
         v-else
@@ -85,7 +85,7 @@ import {useDroneStore} from "stores/drone.js";
 
 const droneStore = useDroneStore();
 const {sendCommand} = droneStore;
-const {droneList, selectedDroneId } = storeToRefs(droneStore)
+const {droneList, selectedDroneId, originPosition } = storeToRefs(droneStore)
 
 // 使用 storeToRefs 保持响应性
 const {selectedDrone, droneStatus, batteryLevel} = storeToRefs(droneStore);
@@ -106,11 +106,27 @@ const altitude = computed(() => droneStatus.value.altitude?.toFixed(1) || '0.0')
 const speed = computed(() => droneStatus.value.speed?.toFixed(1) || '0.0');
 const heading = computed(() => droneStatus.value.heading?.toFixed(1) || '0');
 
-
 const $layoutStore = useLayoutStore()
 
 function flightControl() {
   $layoutStore.controlPanelShow = !$layoutStore.controlPanelShow
+}
+
+// 起飞时设置原点位置
+async function takeoffWithOrigin() {
+  try {
+    // 设置原点位置为当前无人机位置
+    if (droneStatus.value.isConnected && droneStatus.value.latitude && droneStatus.value.longitude) {
+      originPosition.value.lat = droneStatus.value.latitude;
+      originPosition.value.lng = droneStatus.value.longitude;
+      console.log('设置起飞原点:', originPosition.value);
+    }
+
+    // 发送起飞命令
+    await sendCommand('takeoff');
+  } catch (error) {
+    console.error('起飞失败:', error);
+  }
 }
 </script>
 

@@ -14,6 +14,30 @@
       </div>
     </div>
     <div id="container" class="tech-map"></div>
+
+    <!-- 清除按钮组 -->
+    <div class="clear-buttons">
+      <q-btn
+        @click="clearDronePath"
+        label="清除轨迹"
+        icon="timeline"
+        size="sm"
+        flat
+        dense
+        no-caps
+        class="clear-btn"
+      />
+      <q-btn
+        @click="clearAllDrones"
+        label="清除所有"
+        icon="clear_all"
+        size="sm"
+        flat
+        dense
+        no-caps
+        class="clear-btn"
+      />
+    </div>
   </div>
 </template>
 
@@ -31,77 +55,193 @@ const showRoadNet = ref(false);
 
 // 无人机状态管理
 const droneStore = useDroneStore();
-let droneMarker = null;
-let dronePath = null;
+let drones = {}; // 存储所有无人机的标记和轨迹
 
-function updateDroneOnMap(status, shouldRecenter = false) {
-  if (!map || !status || !status.isConnected) {
-    if (droneMarker) {
-      map.remove(droneMarker);
-      droneMarker = null;
+// 平滑因子，值越小，轨迹越平滑，但会有轻微延迟。推荐范围 0.2 - 0.5
+const SMOOTHING_FACTOR = 0.3;
+
+// 无人机图标SVG
+const droneIconSvg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+    <path d="M14,2 L26,26 L14,22 L2,26 L14,2" fill="#F57C00" stroke="#FFF" stroke-width="1"/>
+  </svg>
+`;
+
+// 清除所有轨迹线的函数
+function clearDronePath() {
+  if (!map) return;
+
+  // 重置轨迹数据但保留标记
+  Object.values(drones).forEach(drone => {
+    if (drone.polyline) {
+      drone.polyline.setPath([]);
     }
-    if (dronePath) {
-      map.remove(dronePath);
-      dronePath = null;
+  });
+
+  console.log("所有轨迹线已清除");
+}
+
+// 清除所有无人机显示的函数
+function clearAllDrones() {
+  if (!map) return;
+
+  // 清除所有无人机的标记和轨迹
+  Object.keys(drones).forEach(clientId => {
+    resetDroneDisplay(clientId);
+  });
+
+  console.log("所有无人机显示已清除");
+}
+
+// 清除指定无人机的轨迹
+function clearSpecificDronePath(clientId) {
+  if (!map || !drones[clientId]) return;
+
+  const drone = drones[clientId];
+  if (drone.polyline) {
+    drone.polyline.setPath([]);
+    console.log(`无人机 ${clientId} 的轨迹已清除`);
+  }
+}
+
+// 重置无人机显示的函数
+function resetDroneDisplay(clientId) {
+  if (!map || !drones[clientId]) return;
+
+  const drone = drones[clientId];
+  if (drone.marker) {
+    map.remove(drone.marker);
+  }
+  if (drone.polyline) {
+    map.remove(drone.polyline);
+  }
+
+  delete drones[clientId];
+  console.log(`无人机 ${clientId} 的显示已重置`);
+}
+
+// 更新无人机位置和轨迹
+function updateDroneOnMap(status, clientId, shouldRecenter = false) {
+  if (!map || !status || !status.isConnected) {
+    if (drones[clientId]) {
+      resetDroneDisplay(clientId);
     }
     return;
   }
 
-  const position = new window.AMap.LngLat(status.longitude, status.latitude);
-  const heading = status.heading || 0;
+  // 修复坐标字段匹配问题 - 优先使用正确的字段名
+  const longitude = status.longitude || status.longtitude || 0;
+  const latitude = status.latitude || 0;
 
-  // 添加无人机图标
-  if (!droneMarker) {
-    droneMarker = new window.AMap.Marker({
-      position,
+  // 检查坐标是否有效
+  if (!longitude || !latitude || longitude === 0 || latitude === 0) {
+    console.warn(`无人机 ${clientId} 无效的坐标数据:`, { longitude, latitude, status });
+    return;
+  }
+
+  const position = new window.AMap.LngLat(longitude, latitude);
+  const heading = status.heading || status.head || 0;
+
+  // console.log(`更新无人机 ${clientId} 位置:`, { longitude, latitude, heading, isConnected: status.isConnected });
+
+  if (drones[clientId]) {
+    const drone = drones[clientId];
+
+    // 使用指数移动平均(EMA)算法平滑位置
+    const lastSmoothedPosition = drone.lastSmoothedPosition;
+    const smoothedLat = lastSmoothedPosition.lat * (1 - SMOOTHING_FACTOR) + position.lat * SMOOTHING_FACTOR;
+    const smoothedLng = lastSmoothedPosition.lng * (1 - SMOOTHING_FACTOR) + position.lng * SMOOTHING_FACTOR;
+
+    const smoothedPosition = new window.AMap.LngLat(smoothedLng, smoothedLat);
+
+    drone.marker.setPosition(smoothedPosition);
+    drone.marker.setAngle(heading);
+
+    const path = drone.polyline.getPath();
+    path.push(smoothedPosition);
+    drone.polyline.setPath(path);
+
+    drone.lastSmoothedPosition = smoothedPosition;
+
+    // 是否居中地图
+    if (shouldRecenter) {
+      map.setZoomAndCenter(17, smoothedPosition, false, 500);
+    }
+  } else {
+    console.log(`首次检测到无人机 ${clientId}，正在创建地图对象...`);
+
+    const marker = new window.AMap.Marker({
+      position: position,
       icon: new window.AMap.Icon({
-        size: new window.AMap.Size(40, 40),
-        image:
-          'data:image/svg+xml;utf8,<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 0L124 768l388-194 388 194L512 0z" fill="%234A90E2" stroke="%23FFFFFF" stroke-width="40" /></svg>',
-        imageSize: new window.AMap.Size(40, 40)
+        size: new window.AMap.Size(28, 28),
+        image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(droneIconSvg),
+        imageSize: new window.AMap.Size(28, 28),
       }),
-      offset: new window.AMap.Pixel(-20, -20),
+      offset: new window.AMap.Pixel(-14, -14),
       angle: heading,
       clickable: false
     });
-    map.add(droneMarker);
-    console.log("无人机标记已创建");
-  } else {
-    droneMarker.setPosition(position);
-    droneMarker.setAngle(heading);
-  }
 
-  // 添加或更新轨迹线
-  if (!dronePath) {
-    dronePath = new window.AMap.Polyline({
+    const polyline = new window.AMap.Polyline({
       path: [position],
-      strokeColor: "#4A90E2",
-      strokeWeight: 4,
+      strokeColor: "#F57C00",
+      strokeWeight: 5,
       strokeOpacity: 0.8,
-      lineJoin: "round"
+      lineJoin: 'round',
+      clickable: false
     });
-    map.add(dronePath);
-  } else {
-    const path = dronePath.getPath();
-    path.push(position);
-    if (path.length > 200) path.shift(); // 限制最大轨迹点数
-    dronePath.setPath(path);
-  }
 
-  // 是否居中地图
-  if (shouldRecenter) {
-    map.setZoomAndCenter(17, position, false, 500);
+    map.add([marker, polyline]);
+
+    drones[clientId] = {
+      marker: marker,
+      polyline: polyline,
+      lastSmoothedPosition: position
+    };
+
+    // 如果是第一个无人机，居中地图
+    if (Object.keys(drones).length === 1) {
+      map.setCenter(position);
+    }
   }
 }
 
+// 监听无人机状态变化
 watch(
   () => droneStore.droneStatus,
   (newStatus, oldStatus) => {
+    const clientId = 'drone-1'; // 可以根据实际需要修改无人机ID
+
     const justConnected = !oldStatus?.isConnected && newStatus?.isConnected;
-    updateDroneOnMap(newStatus, justConnected);
+    const justDisconnected = oldStatus?.isConnected && !newStatus?.isConnected;
+
+    if (justDisconnected) {
+      // 无人机断开连接时清除显示
+      resetDroneDisplay(clientId);
+      console.log(`无人机 ${clientId} 断开连接，已清除显示`);
+    } else {
+      updateDroneOnMap(newStatus, clientId, justConnected);
+    }
   },
   { deep: true }
 );
+
+// 更新多个无人机的函数（供外部调用）
+function updateMultipleDrones(dronesData) {
+  if (!map || !dronesData) return;
+
+  Object.entries(dronesData).forEach(([clientId, droneData]) => {
+    updateDroneOnMap(droneData, clientId, false);
+  });
+}
+
+// 导出函数供外部使用
+defineExpose({
+  updateMultipleDrones,
+  clearDronePath,
+  clearAllDrones,
+  clearSpecificDronePath
+});
 
 function setBaseType(type) {
   if (!map) return;
@@ -134,8 +274,8 @@ onMounted(() => {
   };
   AMapLoader.load({
     key: "ecc03cb91886825cd841398653f02848",
-    version: "2.1Beta",
-    plugins: ["AMap.Scale", "AMap.Terrain"]
+    version: "2.0",
+    plugins: ["AMap.Scale", "AMap.Terrain", "AMap.Polyline"]
   })
     .then((AMap) => {
       map = new AMap.Map("container", {
@@ -304,4 +444,29 @@ function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
 .tech-map {
   position: relative;
 }
+
+
+.clear-buttons {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clear-btn {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid #ddd !important;
+  color: #333 !important;
+}
+
+.clear-btn:hover {
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: #4a90e2 !important;
+  color: #4a90e2 !important;
+}
+
+
 </style>
