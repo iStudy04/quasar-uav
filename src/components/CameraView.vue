@@ -15,7 +15,8 @@ const props = defineProps({
   ip: String
 })
 
-const streamUrl = computed(() => `http://${props.ip}:8080/?action=stream`)
+// const streamUrl = computed(() => `http://${props.ip}:8080/?action=stream`)
+const streamUrl = computed(() => `http://192.168.19.254:8080/?action=stream`)
 
 onMounted(()=>{
   console.log("摄像头ip地址为"+props.ip)

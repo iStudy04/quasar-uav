@@ -4,8 +4,7 @@ import {ref, computed} from 'vue'
 import {api} from 'boot/axios' // 引入Quasar的axios实例
 
 // WebSocket 地址 - 与 single.html 保持一致
-const WS_URL = `ws://localhost:8081/ws/control`
-
+const WS_URL = `ws://127.0.0.1:8081/ws/control`
 export const useDroneStore = defineStore('drone', () => {
   // --- State ---
   // 所有已连接的无人机列表，格式: [{ id, ip, name, ... }, ...]
@@ -275,7 +274,7 @@ export const useDroneStore = defineStore('drone', () => {
       payload: {
         command: 'set_ros_target',
         x: parseFloat(data.y),
-        y: parseFloat(-data.x),
+        y: parseFloat(data.x),
         z: 0,
       }
     }

@@ -3,7 +3,7 @@
 
 import { defineConfig } from '#q-app/wrappers'
 
-const baseUrl = 'http://localhost:8081'
+const baseUrl = 'http://127.0.0.1:8081'
 
 export default defineConfig((/* ctx */) => {
   return {
@@ -84,7 +84,7 @@ export default defineConfig((/* ctx */) => {
           changeOrigin: true, // 必须设置为 true，否则后端可能会拒绝请求
           // 如果你的API路径中不包含 /api，可以用 pathRewrite 去掉它
           // pathRewrite: { '^/api': '' } // 例如 /api/clients -> /clients
-        }
+        },
         // 你可以添加更多代理规则，例如 /ws
       }
     },
