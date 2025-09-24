@@ -88,12 +88,51 @@ function toRealCoords(displayLngLat) {
     };
 }
 
-// 无人机图标SVG
-const droneIconSvg = `
+// 颜色管理：为不同无人机分配稳定颜色
+const COLOR_PALETTE = [
+  "#e53935", "#8e24aa", "#3949ab", "#1e88e5", "#00897b", "#43a047",
+  "#f4511e", "#6d4c41", "#546e7a", "#d81b60", "#00acc1", "#7cb342"
+];
+const clientIdToColor = {};
+function hashToIndex(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0; // 转为32位整数
+  }
+  return Math.abs(hash) % COLOR_PALETTE.length;
+}
+function getColorForClient(clientId) {
+  if (!clientIdToColor[clientId]) {
+    clientIdToColor[clientId] = COLOR_PALETTE[hashToIndex(clientId)];
+  }
+  return clientIdToColor[clientId];
+}
+
+// 将颜色调淡（与白色混合）
+function lightenColor(hex, ratio = 0.7) {
+  // ratio 取值 0~1，越大越接近白色
+  const clean = hex.replace('#', '');
+  const bigint = parseInt(clean.length === 3
+    ? clean.split('').map(c => c + c).join('')
+    : clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  const mix = (c) => Math.round(c + (255 - c) * ratio);
+  const rr = mix(r).toString(16).padStart(2, '0');
+  const gg = mix(g).toString(16).padStart(2, '0');
+  const bb = mix(b).toString(16).padStart(2, '0');
+  return `#${rr}${gg}${bb}`;
+}
+
+// 动态生成无人机图标SVG，填充为对应颜色
+function makeDroneIconSvg(color) {
+  return `
   <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-    <path d="M14,2 L26,26 L14,22 L2,26 L14,2" fill="#F57C00" stroke="#FFF" stroke-width="1"/>
-  </svg>
-`;
+    <path d="M14,2 L26,26 L14,22 L2,26 L14,2" fill="${color}" stroke="#FFF" stroke-width="1"/>
+  </svg>`;
+}
 
 // 清除所有轨迹线的函数
 function clearDronePath() {
@@ -194,13 +233,15 @@ function updateDroneOnMap(status, clientId, shouldRecenter = false) {
     }
   } else {
     console.log(`首次检测到无人机 ${clientId}，正在创建地图对象...`);
+    const baseColor = getColorForClient(clientId);
+    const color = lightenColor(baseColor, 0.65);
 
-    // 3. 【修改】创建标记和轨迹时，使用转换后的【显示坐标】
+    // 3. 【修改】创建标记和轨迹时，使用转换后的【显示坐标】与专属颜色
     const marker = new window.AMap.Marker({
       position: displayPosition, // 使用显示坐标
       icon: new window.AMap.Icon({
         size: new window.AMap.Size(28, 28),
-        image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(droneIconSvg),
+        image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(makeDroneIconSvg(color)),
         imageSize: new window.AMap.Size(28, 28),
       }),
       offset: new window.AMap.Pixel(-14, -14),
@@ -210,9 +251,9 @@ function updateDroneOnMap(status, clientId, shouldRecenter = false) {
 
     const polyline = new window.AMap.Polyline({
       path: [displayPosition], // 轨迹起点使用显示坐标
-      strokeColor: "#F57C00",
+      strokeColor: color,
       strokeWeight: 5,
-      strokeOpacity: 0.8,
+      strokeOpacity: 0.65,
       lineJoin: 'round',
       clickable: false
     });
@@ -222,7 +263,8 @@ function updateDroneOnMap(status, clientId, shouldRecenter = false) {
     drones[clientId] = {
       marker: marker,
       polyline: polyline,
-      lastSmoothedPosition: displayPosition // 初始化平滑位置也用显示坐标
+      lastSmoothedPosition: displayPosition, // 初始化平滑位置也用显示坐标
+      color: color
     };
 
     if (Object.keys(drones).length === 1) {
@@ -232,22 +274,39 @@ function updateDroneOnMap(status, clientId, shouldRecenter = false) {
 }
 
 
-// 监听无人机状态变化
+// 监听所有无人机遥测，批量更新轨迹
 watch(
-  () => droneStore.droneStatus,
-  (newStatus, oldStatus) => {
-    const clientId = 'drone-1'; // 可以根据实际需要修改无人机ID
+  () => droneStore.rawTelemetry,
+  (telemetryMap) => {
+    if (!telemetryMap) return;
 
-    const justConnected = !oldStatus?.isConnected && newStatus?.isConnected;
-    const justDisconnected = oldStatus?.isConnected && !newStatus?.isConnected;
+    // 1) 将 rawTelemetry 映射为 updateDroneOnMap 识别的状态结构
+    const mapped = {};
+    Object.entries(telemetryMap).forEach(([clientId, t]) => {
+      if (!t) return;
+      mapped[clientId] = {
+        isConnected: true,
+        // 兼容两种字段
+        latitude: t.latitude || 0,
+        longitude: t.longtitude || 0,
+        longtitude: t.longtitude || 0,
+        head: t.head || 0,
+        heading: t.head || 0,
+        height: t.height || 0,
+        speed: t.speed || 0
+      };
+    });
 
-    if (justDisconnected) {
-      // 无人机断开连接时清除显示
-      resetDroneDisplay(clientId);
-      console.log(`无人机 ${clientId} 断开连接，已清除显示`);
-    } else {
-      updateDroneOnMap(newStatus, clientId, justConnected);
-    }
+    // 2) 更新或创建所有无人机图层
+    updateMultipleDrones(mapped);
+
+    // 3) 清理已不在 telemetry 中的无人机
+    const activeIds = new Set(Object.keys(mapped));
+    Object.keys(drones).forEach((id) => {
+      if (!activeIds.has(id)) {
+        resetDroneDisplay(id);
+      }
+    });
   },
   { deep: true }
 );
