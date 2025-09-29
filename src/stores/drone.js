@@ -39,6 +39,7 @@ export const useDroneStore = defineStore('drone', () => {
     const telemetry = selectedDroneId.value ? rawTelemetry.value[selectedDroneId.value] : null;
     if (!selectedDrone.value || !telemetry) {
       return {
+        flystate: 0,
         isConnected: false,
         isFlying: false,
         battery: {percent: 0}, // 保持数据结构一致
@@ -57,7 +58,7 @@ export const useDroneStore = defineStore('drone', () => {
     // MSDK v5 使用 height, speed, head, longtitude, latitude
     return {
       isConnected: true,
-      isFlying: (telemetry.height || 0) > 0.8, // 根据高度判断是否在飞行
+      isFlying: telemetry.flystate != 0, // 根据flystate字段判断是否在飞行
       battery: telemetry.battery_info?.batteries?.[0] || {percent: 0},
       altitude: telemetry.height || 0,
       latitude: telemetry.latitude || 0,
