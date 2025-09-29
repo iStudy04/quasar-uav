@@ -4,10 +4,45 @@
     <q-expansion-item
       v-model="expanded"
       icon="webhook"
-      label="当前无人机"
+      label="多选无人机"
       :caption="curDroneCaption"
       class="tech-expansion"
     >
+      <!-- 多选控制按钮 -->
+      <template v-slot:header>
+        <q-item-section>
+          <q-item-label>多选无人机</q-item-label>
+          <q-item-label caption>{{ curDroneCaption }}</q-item-label>
+        </q-item-section>
+        <q-item-section side>
+          <div class="row q-gutter-xs">
+            <q-btn
+              flat
+              dense
+              round
+              icon="select_all"
+              color="primary"
+              @click.stop="selectAllDrones"
+              size="sm"
+            >
+              <q-tooltip>全选</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="selectedDroneIds.length > 0"
+              flat
+              dense
+              round
+              icon="clear_all"
+              color="negative"
+              @click.stop="clearMultiSelection"
+              size="sm"
+            >
+              <q-tooltip>清空选择</q-tooltip>
+            </q-btn>
+          </div>
+        </q-item-section>
+      </template>
+
       <!-- 列表内容 -->
       <q-scroll-area style="height: 150px;">
         <q-list bordered separator>
@@ -24,9 +59,17 @@
             :key="drone.id"
             clickable
             v-ripple
-            :active="drone.id === selectedDroneId"
+            :active="selectedDroneIds.includes(drone.id)"
             @click="handleSelectDrone(drone.id)"
           >
+            <q-item-section side>
+              <q-checkbox
+                :model-value="selectedDroneIds.includes(drone.id)"
+                @update:model-value="toggleDroneSelection(drone.id)"
+                @click.stop
+              />
+            </q-item-section>
+
             <q-item-section>
               <q-item-label>{{ drone.name || drone.id }}</q-item-label>
               <q-item-label caption>{{ drone.ip }}</q-item-label>
@@ -54,8 +97,8 @@ const expanded = ref(true)
 
 // store 引入
 const droneStore = useDroneStore()
-const {droneList, selectedDroneId, rawTelemetry} = storeToRefs(droneStore)
-const {selectDrone, isClientAccepted} = droneStore
+const {droneList, selectedDroneIds, rawTelemetry} = storeToRefs(droneStore)
+const {isClientAccepted, toggleDroneSelection, clearMultiSelection, selectAllDrones} = droneStore
 
 // 电量颜色函数
 const getBatteryColor = (level) => {
@@ -68,14 +111,17 @@ const getBatteryColor = (level) => {
 const displayedDrones = computed(() => droneList.value.filter(d => isClientAccepted(d.id)))
 
 const curDroneCaption = computed(() => {
-  const drone = displayedDrones.value.find(d => d.id === selectedDroneId.value)
-  if (!drone) return '未选择无人机'
-  return `${drone.ip}`
+  if (selectedDroneIds.value.length === 0) return '未选择无人机'
+  if (selectedDroneIds.value.length === 1) {
+    const drone = displayedDrones.value.find(d => d.id === selectedDroneIds.value[0])
+    return drone ? `${drone.ip}` : '未知无人机'
+  }
+  return `已选择 ${selectedDroneIds.value.length} 架无人机`
 })
 
-// 点击无人机后选中并折叠面板
+// 点击无人机后选中
 const handleSelectDrone = (id) => {
-  selectDrone(id)
+  toggleDroneSelection(id)
 }
 </script>
 

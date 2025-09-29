@@ -11,28 +11,73 @@
     </q-header>
 
     <!-- 左侧菜单 -->
-    <q-drawer v-model="drawer" show-if-above bordered :width="200" class="tech-drawer">
+    <q-drawer v-model="drawer" show-if-above bordered :width="220" class="tech-drawer">
       <q-list padding class="tech-menu">
         <q-item clickable v-ripple to="/" exact class="tech-menu-item">
           <q-item-section avatar><q-icon name="dashboard" class="tech-icon" /></q-item-section>
           <q-item-section class="tech-text">主控制台</q-item-section>
         </q-item>
-        <q-item clickable v-ripple to="/droneManagement" class="tech-menu-item">
-          <q-item-section avatar><q-icon name="flight_takeoff" class="tech-icon" /></q-item-section>
-          <q-item-section class="tech-text">无人机管理</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple to="/clusterControl" class="tech-menu-item">
-          <q-item-section avatar><q-icon name="grain" class="tech-icon" /></q-item-section>
-          <q-item-section class="tech-text">集群控制</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple class="tech-menu-item">
-          <q-item-section avatar><q-icon name="settings_remote" class="tech-icon" /></q-item-section>
-          <q-item-section class="tech-text">控制面板</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple class="tech-menu-item">
-          <q-item-section avatar><q-icon name="person_add" class="tech-icon" /></q-item-section>
-          <q-item-section class="tech-text">用户注册</q-item-section>
-        </q-item>
+
+        <q-expansion-item icon="hub" label="集群管理" header-class="tech-text" expand-separator>
+          <q-item clickable v-ripple to="/cluster/ingress" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="login" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">无人机接入</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/cluster/auth" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="verified_user" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">无人机认证</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/cluster/status" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="insights" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">无人机状态</q-item-section>
+          </q-item>
+        </q-expansion-item>
+
+        <q-expansion-item icon="flight_takeoff" label="单机控制" header-class="tech-text" expand-separator>
+          <q-item clickable v-ripple to="/single/flight" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="flight" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">飞行控制</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/single/avoidance" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="radar" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">单机避障</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/single/path-planning" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="route" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">航迹规划</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/single/vln" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="psychology" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">视觉语言导航</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/single/voice" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="keyboard_voice" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">语音控制</q-item-section>
+          </q-item>
+        </q-expansion-item>
+
+        <q-expansion-item icon="groups" label="集群控制" header-class="tech-text" expand-separator>
+          <q-item clickable v-ripple to="/swarm/control" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="tune" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">协同控制</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/swarm/formation" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="polyline" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">协同编队</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/swarm/avoidance" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="sensors" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">协同避障</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/swarm/vision-voice" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="smart_toy" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">视觉语音导航</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/swarm/voice" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="record_voice_over" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">语音控制</q-item-section>
+          </q-item>
+        </q-expansion-item>
       </q-list>
     </q-drawer>
 
