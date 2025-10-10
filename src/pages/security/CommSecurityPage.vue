@@ -1,6 +1,6 @@
 <template>
-  <q-page padding>
-    <div>单机控制 / 语音控制</div>
+  <q-page class="q-pa-md">
+    <div class="text-h5 q-mb-md">通信安全</div>
   </q-page>
 </template>
 
@@ -9,6 +9,7 @@
 
 <style scoped>
 </style>
+
 
 
 

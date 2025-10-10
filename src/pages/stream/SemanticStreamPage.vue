@@ -1,6 +1,6 @@
 <template>
-  <q-page padding>
-    <div>集群控制 / 语音控制</div>
+  <q-page class="q-pa-md">
+    <div class="text-h5 q-mb-md">语义图传</div>
   </q-page>
 </template>
 
@@ -9,5 +9,8 @@
 
 <style scoped>
 </style>
+
+
+
 
 

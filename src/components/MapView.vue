@@ -489,7 +489,7 @@ function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
 }
 #container {
   width: 100%;
-  height: 92vh;
+  height: 92.5vh;
   border: 2px solid #4a90e2;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(74, 144, 226, 0.15),

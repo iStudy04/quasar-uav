@@ -1,6 +1,6 @@
 <template>
   <q-card flat class="tech-camera-card">
-    <div class="camera-header tech-text">实时监控</div>
+    <div class="camera-header tech-text">视频图传</div>
     <div class="camera-container">
 <!--      <img src="http://192.168.1.121:8080/?action=stream" class="tech-camera-feed">-->
       <img :src="streamUrl" class="tech-camera-feed" />
@@ -15,8 +15,8 @@ const props = defineProps({
   ip: String
 })
 
-// const streamUrl = computed(() => `http://${props.ip}:8080/?action=stream`)
-const streamUrl = computed(() => `http://192.168.19.254:8080/?action=stream`)
+const streamUrl = computed(() => `http://${props.ip}:8080/?action=stream`)
+// const streamUrl = computed(() => `http://192.168.19.254:8080/?action=stream`)
 
 onMounted(()=>{
   console.log("摄像头ip地址为"+props.ip)
