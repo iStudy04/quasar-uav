@@ -58,7 +58,7 @@ let drones = {}; // 存储所有无人机的标记和轨迹
 
 const SMOOTHING_FACTOR = 0.3;
 const lngOffset = 0.0052;
-const latOffset = -0.00205;
+const latOffset = -0.00208;
 
 /**
  * 将真实的GPS坐标转换为地图上显示的坐标
@@ -129,8 +129,15 @@ function lightenColor(hex, ratio = 0.7) {
 // 动态生成无人机图标SVG，填充为对应颜色
 function makeDroneIconSvg(color) {
   return `
-  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-    <path d="M14,2 L26,26 L14,22 L2,26 L14,2" fill="${color}" stroke="#FFF" stroke-width="1"/>
+  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <defs>
+      <filter id="drop-shadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.6"/>
+      </filter>
+    </defs>
+    <g filter="url(#drop-shadow)">
+      <path d="M16,4 L28,28 L16,24 L4,28 Z" fill="${color}" stroke="#FFFFFF" stroke-width="1.5"/>
+    </g>
   </svg>`;
 }
 
@@ -236,15 +243,17 @@ function updateDroneOnMap(status, clientId, shouldRecenter = false) {
     const baseColor = getColorForClient(clientId);
     const color = lightenColor(baseColor, 0.65);
 
-    // 3. 【修改】创建标记和轨迹时，使用转换后的【显示坐标】与专属颜色
+    //创建标记和轨迹时，使用转换后的【显示坐标】与专属颜色
     const marker = new window.AMap.Marker({
-      position: displayPosition, // 使用显示坐标
+      position: displayPosition,
       icon: new window.AMap.Icon({
-        size: new window.AMap.Size(28, 28),
+        // SVG尺寸变为32x32
+        size: new window.AMap.Size(32, 32),
         image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(makeDroneIconSvg(color)),
-        imageSize: new window.AMap.Size(28, 28),
+        imageSize: new window.AMap.Size(32, 32),
       }),
-      offset: new window.AMap.Pixel(-14, -14),
+      // 中心点偏移量也要调整
+      offset: new window.AMap.Pixel(-16, -16),
       angle: heading,
       clickable: false
     });
