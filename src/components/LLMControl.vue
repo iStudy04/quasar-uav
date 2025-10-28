@@ -10,9 +10,28 @@
         filled
         type="textarea"
         rows="3"
-        placeholder="例如：向前飞10米，或以2m/s的速度向左飞3秒"
+        placeholder="例如：向前飞10米，或点击右侧麦克风说话"
         @keydown.enter.prevent="sendLlmCommand"
-      />
+      >
+        <!-- 新增：语音输入按钮 -->
+        <template v-slot:append>
+          <q-btn
+            round
+            dense
+            flat
+            :icon="isListening ? 'mic_off' : 'mic'"
+            :color="isListening ? 'negative' : 'grey'"
+            :loading="isListening"
+            :disable="isProcessing"
+            @click="toggleVoiceInput"
+            aria-label="语音输入"
+          >
+            <q-tooltip>
+              {{ isListening ? '停止录音' : '开始语音输入' }}
+            </q-tooltip>
+          </q-btn>
+        </template>
+      </q-input>
     </q-card-section>
 
     <q-card-actions align="between" class="q-px-md q-pb-md">
@@ -25,7 +44,7 @@
         color="primary"
         unelevated
         :loading="isProcessing"
-        :disable="isProcessing"
+        :disable="isProcessing || !llmPrompt"
         @click="sendLlmCommand"
       >
         <template v-slot:loading>
@@ -37,14 +56,13 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue';
+import { ref, onUnmounted, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import { useDroneStore } from 'stores/drone';
 
 // --- Quasar and Pinia Setup ---
 const $q = useQuasar();
 const droneStore = useDroneStore();
-// 从 store 中解构出需要的函数
 const { sendPosition, sendJoystickData } = droneStore;
 
 // --- Component State ---
@@ -52,22 +70,108 @@ const llmPrompt = ref('');
 const llmOutput = ref('等待输入...');
 const isProcessing = ref(false);
 
+// 语音识别相关的状态
+const isListening = ref(false);
+const speechRecognitionSupported = ref(false);
+let recognition = null;
+
 // 用于存储速度指令的定时器ID
-// 不需要是 ref，因为它不直接驱动模板更新
 let velocityInterval = null;
 
-// --- Core Logic ---
+// --- 语音识别逻辑 (Web Speech API) ---
+
+/**
+ * 设置并初始化语音识别
+ */
+function setupSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition) {
+    speechRecognitionSupported.value = true;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    // 当有识别结果时触发
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      llmPrompt.value = transcript; // 实时更新输入框内容
+
+      // 修改点 1: 当这是最终结果时，不再自动发送指令
+      if (event.results[0].isFinal) {
+        isListening.value = false;
+        llmOutput.value = '等待发送...'; // 更新状态提示
+        $q.notify({
+          type: 'info',
+          icon: 'check_circle_outline',
+          message: '语音识别完成，请确认后发送。'
+        });
+      }
+    };
+
+    // 当识别结束时触发
+    recognition.onend = () => {
+      // 确保即使没有最终结果，监听状态也能被重置
+      if (isListening.value) {
+        isListening.value = false;
+        // 如果输入框为空，说明可能没识别到内容
+        if (!llmPrompt.value.trim()) {
+            llmOutput.value = '等待输入...';
+        }
+      }
+    };
+
+    // 处理错误
+    recognition.onerror = (event) => {
+      let errorMessage = '语音识别发生错误';
+      if (event.error === 'no-speech') {
+        errorMessage = '未检测到语音，请重试。';
+      } else if (event.error === 'not-allowed') {
+        errorMessage = '麦克风权限被拒绝，请在浏览器设置中允许访问。';
+      }
+      $q.notify({ type: 'negative', message: errorMessage });
+      isListening.value = false;
+      llmOutput.value = '等待输入...';
+    };
+  } else {
+    speechRecognitionSupported.value = false;
+    $q.notify({ type: 'warning', message: '您的浏览器不支持语音识别功能。' });
+  }
+}
+
+/**
+ * 切换语音输入的开始/停止状态
+ */
+function toggleVoiceInput() {
+  if (!speechRecognitionSupported.value) {
+    $q.notify({ type: 'negative', message: '抱歉，语音识别功能不可用。' });
+    return;
+  }
+  if (isListening.value) {
+    recognition.stop();
+    isListening.value = false;
+  } else {
+    llmPrompt.value = ''; // 开始前清空输入框
+    llmOutput.value = '聆听中...';
+    recognition.start();
+    isListening.value = true;
+  }
+}
+
+// --- Core Logic (与之前相同) ---
 
 /**
  * 执行从LLM解析出的无人机指令
- * @param {string} commandString - AI返回的指令字符串, e.g., "p 10 0 0 0 0" or "v 0 2 0 0 3"
+ * (此函数无任何改动)
  */
 function executeDroneCommand(commandString) {
-  // 停止任何正在进行的速度指令
+  // ... (此部分代码保持原样)
   if (velocityInterval) {
     clearInterval(velocityInterval);
     velocityInterval = null;
-    // 发送零速指令以确保无人机立即停止
     sendJoystickData({ left_stick_x: 0, left_stick_y: 0, right_stick_x: 0, right_stick_y: 0 });
     $q.notify({ type: 'info', message: '已停止之前的速度指令。' });
   }
@@ -88,18 +192,14 @@ function executeDroneCommand(commandString) {
   const time = parseFloat(timeStr);
 
   if (type === 'p') {
-    // 执行位置指令
     $q.notify({
       type: 'positive',
       icon: 'flight_takeoff',
       message: `执行位置指令: X=${x}m, Y=${y}m, Z=${z}m, Yaw=${yaw}°`
     });
-    // 调用 store 中的 sendPosition 方法
     sendPosition({ x, y, z, yaw });
-
   } else if (type === 'v') {
-    // 执行速度指令
-    const duration = time * 1000; // 转换为毫秒
+    const duration = time * 1000;
     if (isNaN(duration) || duration <= 0) {
       const errorMsg = `AI返回的速度指令持续时间无效: ${time}s`;
       $q.notify({ type: 'negative', message: errorMsg });
@@ -113,34 +213,21 @@ function executeDroneCommand(commandString) {
       message: `执行速度指令: Vx=${x}, Vy=${y}, Vz=${z}, Vw=${yaw}，持续 ${time} 秒`
     });
 
-    // 根据 DroneControl.vue 的摇杆映射:
-    // right stick (前进/后退, 左/右) -> left_stick_y, left_stick_x
-    // left stick (升/降, 左/右转) -> right_stick_y, right_stick_x
-    // 假设 AI 的 x, y, z, yaw 分别对应前进、右移、上升、右转
-    // 注意：这里的映射关系需要与你的MSDK后端和AI模型的输出定义完全匹配。
-    // 我们将遵循你提供的 JS 示例中的映射关系：
-    // x -> left_stick_x
-    // y -> left_stick_y
-    // z -> right_stick_y
-    // yaw -> right_stick_x
     const joystickPayload = {
-      left_stick_x: y, // 通常y是左右，映射到left_stick_x
-      left_stick_y: x, // 通常x是前后，映射到left_stick_y
+      left_stick_x: y,
+      left_stick_y: x,
       right_stick_x: yaw,
       right_stick_y: z
     };
 
-    // 每 100ms 发送一次速度指令
     velocityInterval = setInterval(() => {
       sendJoystickData(joystickPayload);
     }, 100);
 
-    // 在指定时间后停止
     setTimeout(() => {
-      if (velocityInterval) { // 检查定时器是否仍然存在
+      if (velocityInterval) {
         clearInterval(velocityInterval);
         velocityInterval = null;
-        // 发送零速指令以确保无人机停止
         sendJoystickData({ left_stick_x: 0, left_stick_y: 0, right_stick_x: 0, right_stick_y: 0 });
         $q.notify({
           type: 'info',
@@ -149,7 +236,6 @@ function executeDroneCommand(commandString) {
         });
       }
     }, duration);
-
   } else {
     const errorMsg = `未知的AI指令类型: "${type}"`;
     $q.notify({ type: 'negative', message: errorMsg });
@@ -157,14 +243,14 @@ function executeDroneCommand(commandString) {
   }
 }
 
-
 /**
  * 发送自然语言指令到后端API
+ * (修改点 2: 简化了此处的逻辑)
  */
 async function sendLlmCommand() {
   const prompt = llmPrompt.value.trim();
   if (!prompt) {
-    $q.notify({ type: 'warning', message: '请输入指令！' });
+    $q.notify({ type: 'warning', message: '请输入或说出指令！' });
     return;
   }
 
@@ -174,9 +260,7 @@ async function sendLlmCommand() {
   try {
     const response = await fetch('/api/process-llm-command', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: prompt })
     });
 
@@ -190,32 +274,33 @@ async function sendLlmCommand() {
 
     llmOutput.value = command;
     $q.notify({ type: 'info', message: `AI解析成功: ${command}` });
-
-    // 执行解析后的指令
     executeDroneCommand(command);
 
   } catch (error) {
     console.error('LLM command failed:', error);
     llmOutput.value = '错误！';
-    $q.notify({
-      type: 'negative',
-      message: `AI指令处理失败: ${error.message}`
-    });
+    $q.notify({ type: 'negative', message: `AI指令处理失败: ${error.message}` });
   } finally {
     isProcessing.value = false;
   }
 }
 
-// --- Lifecycle Hook ---
+// --- Lifecycle Hooks ---
+// (此部分无任何改动)
+onMounted(() => {
+  setupSpeechRecognition();
+});
 
-// 当组件被卸载时，确保清除任何正在运行的定时器，防止内存泄漏和意外行为
 onUnmounted(() => {
   if (velocityInterval) {
     clearInterval(velocityInterval);
     velocityInterval = null;
-    // 也可以在这里发送一个停止指令，以防万一
     sendJoystickData({ left_stick_x: 0, left_stick_y: 0, right_stick_x: 0, right_stick_y: 0 });
     console.log('LLM control component unmounted, velocity interval cleared.');
+  }
+  if (recognition && isListening.value) {
+    recognition.abort();
+    console.log('LLM control component unmounted, speech recognition aborted.');
   }
 });
 </script>

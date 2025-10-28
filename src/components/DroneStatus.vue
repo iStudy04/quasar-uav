@@ -69,10 +69,8 @@
 
 
     <div class="tech-separator"></div>
-
     <CameraView :ip="curDroneIp"/>
-    <CameraView ip="192.168.1.183"/>
-
+    <!-- <CameraView ip="192.168.1.101"/> -->
   </q-card>
 </template>
 

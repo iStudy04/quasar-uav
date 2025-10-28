@@ -108,92 +108,105 @@
           </div>
         </q-tab-panel>
       </q-tab-panels>
+            <!-- ======================================================= -->
+      <!-- 新增：任务模式设置 (Swarm Type) 控制器 -->
+      <!-- ======================================================= -->
+      <q-separator class="q-my-md" />
+      <div class="q-px-md q-pb-sm">
+        <div class="text-subtitle2 q-mb-xs text-grey-8">任务模式设置 (Swarm Type)</div>
+        <div class="row items-center q-gutter-sm">
+          <q-input
+            v-model.number="swarmType"
+            type="number"
+            label="模式值"
+            dense
+            filled
+            style="max-width: 120px"
+            hint="0:手动, 2:航线"
+          />
+          <q-btn
+            label="设置模式"
+            color="deep-orange"
+            @click="setSwarmType"
+            class="tech-btn"
+            icon="settings"
+          />
+        </div>
+      </div>
     </div>
   </div>
 
 </template>
 <script setup>
-import {ref, onMounted, onUnmounted} from 'vue' // 从 Vue 引入响应式和生命周期钩子
-import {useDroneStore} from 'stores/drone' // 引入无人机数据存储
+import {ref, onMounted, onUnmounted} from 'vue'
+import {useDroneStore} from 'stores/drone'
 import {storeToRefs} from 'pinia'
-
 import CompassControl from "./CompassControl.vue";
 import { Notify } from 'quasar'
 
 const droneStore = useDroneStore()
 
-const {droneStatus} = storeToRefs(droneStore)
-const {sendJoystickData, sendCommand, sendPosition, sendTarget} = droneStore
+// 解构 action 函数
+const { sendJoystickData, sendCommand, sendPosition, sendTarget, sendOrigin, sendJsonCommand } = droneStore
+
+// =======================================================
+// 【关键】使用 storeToRefs 后，这些都是 Ref 对象
+// =======================================================
+const { droneStatus, lastCalculatedPosition, originPosition } = storeToRefs(droneStore)
 
 const tab = ref("joystick")
-
-// 使用 ref 来存储摇杆的最新值
 const leftJoystickValues = ref({x: 0, y: 0})
 const rightJoystickValues = ref({x: 0, y: 0})
-
 const rosControlEnabled = ref(false)
 const joystickEnabled = ref(false)
-
-
-// 定时器ID，用于周期性发送摇杆数据
 let joystickInterval = null;
 
-// 更新左摇杆值的回调函数
 const updateLeftJoystick = (values) => {
   leftJoystickValues.value = values
 }
-
-// 更新右摇杆值的回调函数
 const updateRightJoystick = (values) => {
   rightJoystickValues.value = values
 }
 
-// 页面挂载时启动定时器
+const swarmType = ref(0);
+
+function setSwarmType() {
+  const typeValue = Number(swarmType.value);
+  if (isNaN(typeValue)) {
+    Notify.create({ type: 'negative', message: '请输入一个有效的数字！' });
+    return;
+  }
+  sendJsonCommand('set_swarm_type', typeValue);
+  Notify.create({ type: 'positive', message: `任务模式 (Swarm Type) 已发送指令: ${typeValue}`, icon: 'check_circle' });
+}
+
 onMounted(() => {
   joystickInterval = setInterval(() => {
-    // left stick (虚拟摇杆的左侧): 高度(y) / 旋转(x) -> MSDK V5 的 right stick
-    // right stick (虚拟摇杆的右侧): 前进(y) / 左右(x) -> MSDK V5 的 left stick
     sendJoystickData({
       left_stick_x: rightJoystickValues.value.x,
       left_stick_y: rightJoystickValues.value.y,
       right_stick_x: leftJoystickValues.value.x,
       right_stick_y: leftJoystickValues.value.y,
     })
-  }, 100); // 每 100ms 发送一次 (10Hz)，这是实时控制的常用频率
+  }, 100);
 });
 
-// 页面卸载时清除定时器，避免内存泄漏
 onUnmounted(() => {
   if (joystickInterval) {
     clearInterval(joystickInterval)
-    joystickInterval = null; // 清除引用
+    joystickInterval = null;
   }
 });
 
 const onRosControlChange = (value) => {
-  if (value) {
-    sendCommand('enable_ros_control')
-  } else {
-    sendCommand('disable_ros_control')
-  }
+  sendCommand(value ? 'enable_ros_control' : 'disable_ros_control')
 }
 
 const onJoystickToggle = (value) => {
-  if (value) {
-    sendCommand('enable_vstick')
-  } else {
-    sendCommand('disable_vstick')
-  }
+  sendCommand(value ? 'enable_vstick' : 'disable_vstick')
 }
 
-// 相对坐标控制
-const pos = ref({
-  x: 0,
-  y: 0,
-  z: 0,
-  yaw: 0
-})
-
+const pos = ref({ x: 0, y: 0, z: 0, yaw: 0 })
 const isSending = ref(false)
 
 function sendPositionCommand(pos) {
@@ -203,32 +216,55 @@ function sendPositionCommand(pos) {
 }
 
 function onReset(){
-  pos.value.x = 0
-  pos.value.y = 0
-  pos.value.z = 0
-  pos.value.yaw = 0
+  pos.value = { x: 0, y: 0, z: 0, yaw: 0 }
 }
 
-
-// 地图打点控制
-const {lastCalculatedPosition, originPosition, sendOrigin} = useDroneStore()
-
+// =======================================================
+// 【重大修改】修正 sendOriginCommand 函数
+// =======================================================
 function sendOriginCommand(){
-  console.log(lastCalculatedPosition)
-  originPosition.lng = lastCalculatedPosition.lng
-  originPosition.lat = lastCalculatedPosition.lat
-  sendOrigin(originPosition)
-}
-
-function sendTargetCommand(){
-  if(lastCalculatedPosition.lng == '' || lastCalculatedPosition.lng == ''){
-    Notify.create('请先打点!')
+  // 检查 lastCalculatedPosition.value 是否有有效数据
+  if(!lastCalculatedPosition.value || lastCalculatedPosition.value.lng === '' || lastCalculatedPosition.value.lat === ''){
+    Notify.create({
+      type: 'warning',
+      message: '请先在地图上左键点击一个点作为原点!'
+    });
+    return;
   }
-  sendTarget(lastCalculatedPosition)
+
+  // 通过 .value 修改 Ref 内部对象的属性
+  originPosition.value.lng = lastCalculatedPosition.value.lng
+  originPosition.value.lat = lastCalculatedPosition.value.lat
+
+  console.log("设置原点，发送数据:", originPosition.value);
+
+  // 将 Ref 内部的普通对象 (.value) 传递给 action
+  sendOrigin(originPosition.value)
+
+  Notify.create({
+      type: 'positive',
+      message: `原点已设置`
+    });
 }
 
+// =======================================================
+// 【重大修改】修正 sendTargetCommand 函数
+// =================================log======================
+function sendTargetCommand(){
+  // 检查 lastCalculatedPosition.value 是否有有效数据
+  if(!lastCalculatedPosition.value || lastCalculatedPosition.value.lng === '' || lastCalculatedPosition.value.lat === ''){
+    Notify.create({
+      type: 'warning',
+      message: '请先在地图上左键点击一个目标点!'
+    });
+    return
+  }
 
+  console.log("前往目标点，发送数据:", lastCalculatedPosition.value);
 
+  // 将 Ref 内部的普通对象 (.value) 传递给 action
+  sendTarget(lastCalculatedPosition.value)
+}
 </script>
 
 <style scoped>

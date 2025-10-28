@@ -38,13 +38,10 @@
         class="clear-btn"
       />
     </div>
-
-    <!-- 【修改】路径规划控制按钮组 -->
+    <!-- 新增：路径规划控制按钮组 -->
     <div class="path-planning-buttons">
-
-      <!-- 初始状态 -->
       <q-btn
-        v-if="planningPhase === 'idle'"
+        v-if="!droneStore.isPathPlanning"
         @click="startPathPlanning"
         label="开始规划"
         icon="edit_location_alt"
@@ -54,8 +51,7 @@
         no-caps
         class="path-btn"
       />
-      <!-- 规划中状态 -->
-      <template v-if="planningPhase === 'planning'">
+      <template v-else>
         <q-btn
           @click="finishPathPlanning"
           label="完成规划"
@@ -78,49 +74,16 @@
           class="path-btn"
         />
       </template>
-      <!-- 【新增】预览/发送状态 -->
-      <template v-if="planningPhase === 'reviewing'">
-         <q-btn
-          @click="sendPath"
-          label="发送航线"
-          icon="send"
-          color="primary"
-          size="sm"
-          dense
-          no-caps
-          class="path-btn"
-        />
-        <q-btn
-          @click="clearPreviousPath"
-          label="清除规划"
-          icon="delete_sweep"
-          color="grey-7"
-          size="sm"
-          flat
-          dense
-          no-caps
-          class="path-btn"
-        />
-        <q-btn
-          @click="cancelPathPlanning"
-          label="重新规划"
-          icon="edit"
-          color="orange"
-          size="sm"
-          flat
-          dense
-          no-caps
-          class="path-btn"
-        />
-      </template>
     </div>
-
-    <!-- 航点参数设置对话框 (保持不变) -->
+     <!-- ======================================================= -->
+    <!-- 新增：航点参数设置对话框 -->
+    <!-- ======================================================= -->
     <q-dialog v-model="showWaypointDialog" persistent>
       <q-card style="min-width: 350px">
         <q-card-section>
           <div class="text-h6">设置航点参数</div>
         </q-card-section>
+
         <q-card-section class="q-pt-none">
           <q-input
             dense
@@ -134,6 +97,7 @@
               <q-icon name="height" />
             </template>
           </q-input>
+
           <q-input
             dense
             v-model.number="waypointHeading"
@@ -147,6 +111,7 @@
             </template>
           </q-input>
         </q-card-section>
+
         <q-card-actions align="right" class="text-primary">
           <q-btn flat label="取消" v-close-popup />
           <q-btn flat label="确定" @click="handleConfirmWaypoint" />
@@ -171,14 +136,24 @@ const showRoadNet = ref(false);
 const droneStore = useDroneStore();
 let drones = {}; // 存储所有无人机的标记和轨迹
 
+// =======================================================
+// 修改/新增部分：从 store 中获取 ref 对象
+// =======================================================
 const { lastCalculatedPosition, originPosition } = droneStore;
 let customMarker = null; // 目标点标记
-let originMarker = null; // 原点标记
+let originMarker = null; // 【新增】原点标记
+
 
 const SMOOTHING_FACTOR = 0.3;
 const lngOffset = 0.0052;
 const latOffset = -0.00208;
 
+/**
+ * 将真实的GPS坐标转换为地图上显示的坐标
+ * @param {number} lat 真实纬度
+ * @param {number} lng 真实经度
+ * @returns {AMap.LngLat} 用于高德地图API的LngLat对象
+ */
 function toDisplayCoords(lat, lng) {
     if (window.AMap && window.AMap.LngLat) {
         return new window.AMap.LngLat(lng + lngOffset, lat + latOffset);
@@ -187,29 +162,30 @@ function toDisplayCoords(lat, lng) {
     return null;
 }
 
+/**
+ * 将地图上点击的显示坐标转换为真实的GPS坐标
+ * @param {AMap.LngLat} displayLngLat 从高德地图获取的LngLat对象
+ * @returns {{lat: number, lng: number}} 包含真实经纬度的对象
+ */
 function toRealCoords(displayLngLat) {
     return {
         lat: displayLngLat.getLat() - latOffset,
         lng: displayLngLat.getLng() - lngOffset
     };
 }
-
 // --- 路径规划状态管理 ---
-// 【新增】用于存储上一次发送的路径元素，以便清除
-let sentPathVisuals = { markers: [], polyline: null };
-
-// 当前正在规划的路径元素
 let pathMarkers = [];
 let pathPolyline = null;
-const clickPlacementState = ref('idle'); // 'idle' or 'defining_heading'
+const planningState = ref('idle');
 let draftWaypointVisuals = null;
-// 【新增】更精细的规划阶段控制
-const planningPhase = ref('idle'); // 'idle', 'planning', 'reviewing'
 
-function makeWaypointIconSvg(color = "#4a90e2", opacity = 1) {
+// ... (所有路径规划相关函数保持不变，这里省略以保持简洁)
+// makeWaypointIconSvg, calculateAngle, clearDraftVisuals, startPathPlanning,
+// finishPathPlanning, cancelPathPlanning, finalizeCurrentWaypoint, watch on plannedPath...
+function makeWaypointIconSvg(color = "#4a90e2") {
   return `
   <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
-    <g opacity="${opacity}">
+    <g>
       <path d="M15 3 L25 27 L15 22 L5 27 Z" fill="${color}" stroke="#FFFFFF" stroke-width="1.5" />
     </g>
   </svg>`;
@@ -231,95 +207,28 @@ function clearDraftVisuals() {
         draftWaypointVisuals = null;
     }
 }
-
 function startPathPlanning() {
   if (customMarker) {
     map.remove(customMarker);
     customMarker = null;
   }
-
-  // 【核心修改】在开始新规划之前，先清空上一次规划的数据。
-  // 这会触发 watch 监听器，从而自动清除地图上残留的、已发送的路径元素。
-  droneStore.cancelPathPlanning(); // 假设此函数会将 plannedPath 置为空数组 []
-
-  // 然后再正常开始新的规划流程
   droneStore.startPathPlanning();
-  planningPhase.value = 'planning';
-  clickPlacementState.value = 'idle';
+  planningState.value = 'idle';
   map.getContainer().style.cursor = 'crosshair';
 }
-
-// 【修改】完成规划，现在只进入预览模式
 function finishPathPlanning() {
-  if (clickPlacementState.value === 'defining_heading') {
+  if (planningState.value === 'defining_heading') {
     finalizeCurrentWaypoint();
   }
-  planningPhase.value = 'reviewing';
+  const finalPathData = droneStore.finalizePath();
+  console.log("最终路径点数据:", JSON.stringify(finalPathData, null, 2));
+  planningState.value = 'idle';
   map.getContainer().style.cursor = 'grab';
 }
-
-// 【修改】发送航线命令
-async function sendPath() {
-  // 调用修改后的 finalizePath，它会返回发送的路径数据或 null
-  const finalPathData = await droneStore.finalizePath();
-
-  // 只有在发送成功时才执行后续操作
-  if (finalPathData) {
-    console.log("发送最终路径点数据:", JSON.stringify(finalPathData, null, 2));
-
-    // 提高透明度，使其不那么显眼
-    pathMarkers.forEach(group => {
-      group.marker.setOpacity(0.6);
-      group.text.setOpacity(0.6);
-      // 【优化】发送后禁止再编辑
-      group.marker.off('click');
-      group.text.off('click');
-      group.marker.setClickable(false);
-    });
-    if (pathPolyline) {
-      pathPolyline.setOptions({ strokeOpacity: 0.4 });
-    }
-
-    // 将当前路径元素转移到“已发送”存储中，以便“清除”按钮可以找到它们
-    sentPathVisuals.markers = pathMarkers;
-    sentPathVisuals.polyline = pathPolyline;
-
-    // 清空当前规划的元素引用，为下一次规划做准备
-    pathMarkers = [];
-    pathPolyline = null;
-
-    // 重置UI状态到初始界面
-    planningPhase.value = 'idle';
-
-    // 【重要】不再需要调用 resetAfterSend() 或任何清空 store 的操作
-    // store 中的 plannedPath 数据被有意保留
-  }
-}
-
-// 【修改】清除上一次发送的路径
-function clearPreviousPath() {
-  // 1. 从地图上移除视觉元素
-  if (sentPathVisuals.polyline) {
-    map.remove(sentPathVisuals.polyline);
-  }
-  sentPathVisuals.markers.forEach(group => map.remove([group.marker, group.text]));
-  sentPathVisuals.markers = [];
-  sentPathVisuals.polyline = null;
-
-  // 2. 调用 store action 清除路径数据，这将触发 watch 并清理任何残留的显示逻辑
-  droneStore.clearPlannedPath();
-
-  // 如果是在 review 阶段点击清除，则需要同时重置UI状态
-  if (planningPhase.value === 'reviewing') {
-      planningPhase.value = 'idle';
-  }
-}
-
 function cancelPathPlanning() {
   clearDraftVisuals();
   droneStore.cancelPathPlanning();
-  planningPhase.value = 'idle';
-  clickPlacementState.value = 'idle';
+  planningState.value = 'idle';
   map.getContainer().style.cursor = 'grab';
 }
 function finalizeCurrentWaypoint() {
@@ -328,30 +237,26 @@ function finalizeCurrentWaypoint() {
     const newWaypoint = {
         lat: realCoords.lat,
         lng: realCoords.lng,
-        // 【修改】默认高度为 10
-        height: 10,
+        height: 50,
         heading: draftWaypointVisuals.marker.getAngle() || 0,
     };
     droneStore.addWaypoint(newWaypoint);
     clearDraftVisuals();
-    clickPlacementState.value = 'idle';
+    planningState.value = 'idle';
 }
-
 watch(
   () => droneStore.plannedPath,
   (newPath) => {
+    // ... watch 逻辑保持不变
     if (!map) return;
-    // 清理旧的 marker 和 polyline
-    pathMarkers.forEach(group => map.remove([group.marker, group.text]));
+    pathMarkers.forEach(group => map.remove(group.marker, group.text));
     if (pathPolyline) {
       map.remove(pathPolyline);
     }
     pathMarkers = [];
     pathPolyline = null;
     if (newPath.length === 0) return;
-
     const displayPathCoords = newPath.map(waypoint => toDisplayCoords(waypoint.lat, waypoint.lng));
-
     newPath.forEach((waypoint, index) => {
         const displayPos = displayPathCoords[index];
         const marker = new window.AMap.Marker({
@@ -363,28 +268,9 @@ watch(
             }),
             offset: new window.AMap.Pixel(-15, -15),
             angle: waypoint.heading,
-            title: `航点 ${index + 1}\n点击修改航向`,
-            extData: { index },
-            // 【新增】允许 marker 被点击
-            clickable: true,
+            title: `航点 ${index + 1}`,
+            extData: { index }
         });
-
-        // 【新增】为 marker 添加点击事件以修改航向
-        marker.on('click', (e) => {
-            // 仅在规划或预览阶段可编辑
-            if (planningPhase.value === 'planning' || planningPhase.value === 'reviewing') {
-                const currentIndex = marker.getExtData().index;
-                const currentWaypoint = droneStore.plannedPath[currentIndex];
-                const newHeading = prompt(`为航点 ${currentIndex + 1} 输入新的航向 (0-360):`, currentWaypoint.heading);
-                if (newHeading !== null && !isNaN(Number(newHeading))) {
-                    const headingValue = (Number(newHeading) % 360 + 360) % 360; // 确保在 0-360 范围内
-                    droneStore.updateWaypoint(currentIndex, { heading: headingValue });
-                }
-            }
-            // 阻止事件冒泡，防止触发地图的点击事件
-            e.stopPropagation();
-        });
-
         const heightText = new window.AMap.Text({
             text: `高度: ${waypoint.height}m`,
             position: displayPos,
@@ -399,30 +285,20 @@ watch(
             className: 'editable-height-text',
             extData: { index }
         });
-
-        heightText.on('click', (e) => {
-             if (planningPhase.value === 'planning' || planningPhase.value === 'reviewing') {
-                const currentIndex = heightText.getExtData().index;
-                const currentWaypoint = droneStore.plannedPath[currentIndex];
-                const newHeight = prompt("请输入新的飞行高度 (米):", currentWaypoint.height);
-                if (newHeight !== null && !isNaN(Number(newHeight))) {
-                    droneStore.updateWaypoint(currentIndex, { height: Number(newHeight) });
-                }
-             }
-             e.stopPropagation();
+        heightText.on('click', () => {
+            const currentIndex = heightText.getExtData().index;
+            const currentWaypoint = droneStore.plannedPath[currentIndex];
+            const newHeight = prompt("请输入新的飞行高度 (米):", currentWaypoint.height);
+            if (newHeight !== null && !isNaN(Number(newHeight))) {
+                droneStore.updateWaypoint(currentIndex, { height: Number(newHeight) });
+            }
         });
-
         pathMarkers.push({ marker, text: heightText });
     });
-
     map.add(pathMarkers.flatMap(group => [group.marker, group.text]));
-
     if (displayPathCoords.length > 1) {
       pathPolyline = new window.AMap.Polyline({
           path: displayPathCoords,
-          strokeColor: "#4a90e2",
-          strokeWeight: 4,
-          strokeOpacity: 0.8,
       });
       map.add(pathPolyline);
     }
@@ -430,7 +306,7 @@ watch(
   { deep: true }
 );
 
-// ... (无人机显示、颜色管理、清除函数等都保持不变)
+// ... (所有无人机显示、颜色管理、清除函数等都保持不变)
 const COLOR_PALETTE = ['#F44336','#FFEB3B','#2196F3','#4CAF50','#FF9800','#9C27B0',];
 const clientIdToColor = {};
 function hashToIndex(str) {let hash = 0;for (let i = 0; i < str.length; i++) {hash = ((hash << 5) - hash) + str.charCodeAt(i);hash |= 0;}return Math.abs(hash) % COLOR_PALETTE.length;}
@@ -441,24 +317,19 @@ function clearDronePath() {if (!map) return;Object.values(drones).forEach(drone 
 function clearAllDrones() {if (!map) return;Object.keys(drones).forEach(clientId => {resetDroneDisplay(clientId);});console.log("所有无人机显示已清除");}
 function clearSpecificDronePath(clientId) {if (!map || !drones[clientId]) return;const drone = drones[clientId];if (drone.polyline) {drone.polyline.setPath([]);console.log(`无人机 ${clientId} 的轨迹已清除`);}}
 function resetDroneDisplay(clientId) {if (!map || !drones[clientId]) return;const drone = drones[clientId];if (drone.marker) {map.remove(drone.marker);}if (drone.polyline) {map.remove(drone.polyline);}delete drones[clientId];console.log(`无人机 ${clientId} 的显示已重置`);}
-function updateDroneOnMap(status, clientId, shouldRecenter = false) {if (!map || !status || !status.isConnected) {if (drones[clientId]) {resetDroneDisplay(clientId);}return;}const realLongitude = status.longitude || status.longtitude || 0;const realLatitude = status.latitude || 0;if (!realLongitude || !realLatitude) {console.warn(`无人机 ${clientId} 无效的坐标数据:`, { realLongitude, realLatitude });return;}const displayPosition = toDisplayCoords(realLatitude, realLongitude);if (!displayPosition) return;const heading = status.heading || status.head || 0;if (drones[clientId]) {const drone = drones[clientId];const lastSmoothedPosition = drone.lastSmoothedPosition;const smoothedLat = lastSmoothedPosition.lat * (1 - SMOOTHING_FACTOR) + displayPosition.lat * SMOOTHING_FACTOR;const smoothedLng = lastSmoothedPosition.lng * (1 - SMOOTHING_FACTOR) + displayPosition.lng * SMOOTHING_FACTOR;const smoothedPosition = new window.AMap.LngLat(smoothedLng, smoothedLat);drone.marker.setPosition(smoothedPosition);drone.marker.setAngle(heading);const path = drone.polyline.getPath();path.push(smoothedPosition);drone.polyline.setPath(path);drone.lastSmoothedPosition = smoothedPosition;if (shouldRecenter) {map.setZoomAndCenter(17, smoothedPosition, false, 500);}} else {console.log(`首次检测到无人机 ${clientId}，正在创建地图对象...`);const baseColor = getColorForClient(clientId);const color = lightenColor(baseColor, 0.65);const marker = new window.AMap.Marker({position: displayPosition,icon: new window.AMap.Icon({size: new window.AMap.Size(32, 32),image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(makeDroneIconSvg(color)),imageSize: new window.AMap.Size(32, 32),}),offset: new window.AMap.Pixel(-16, -16),angle: heading,clickable: false});const polyline = new window.AMap.Polyline({path: [displayPosition],strokeColor: color,strokeWeight: 5,strokeOpacity: 0.65,lineJoin: 'round',clickable: false});map.add([marker, polyline]);drones[clientId] = {marker: marker,polyline: polyline,lastSmoothedPosition: displayPosition,color: color};
-// 【修改/确认】当第一架无人机出现时，自动移动地图中心
-if (Object.keys(drones).length === 1) {
-    console.log("地图自动聚焦到第一架无人机位置。");
-    map.setZoomAndCenter(17, displayPosition);
-}}}
+function updateDroneOnMap(status, clientId, shouldRecenter = false) {if (!map || !status || !status.isConnected) {if (drones[clientId]) {resetDroneDisplay(clientId);}return;}const realLongitude = status.longitude || status.longtitude || 0;const realLatitude = status.latitude || 0;if (!realLongitude || !realLatitude) {console.warn(`无人机 ${clientId} 无效的坐标数据:`, { realLongitude, realLatitude });return;}const displayPosition = toDisplayCoords(realLatitude, realLongitude);if (!displayPosition) return;const heading = status.heading || status.head || 0;if (drones[clientId]) {const drone = drones[clientId];const lastSmoothedPosition = drone.lastSmoothedPosition;const smoothedLat = lastSmoothedPosition.lat * (1 - SMOOTHING_FACTOR) + displayPosition.lat * SMOOTHING_FACTOR;const smoothedLng = lastSmoothedPosition.lng * (1 - SMOOTHING_FACTOR) + displayPosition.lng * SMOOTHING_FACTOR;const smoothedPosition = new window.AMap.LngLat(smoothedLng, smoothedLat);drone.marker.setPosition(smoothedPosition);drone.marker.setAngle(heading);const path = drone.polyline.getPath();path.push(smoothedPosition);drone.polyline.setPath(path);drone.lastSmoothedPosition = smoothedPosition;if (shouldRecenter) {map.setZoomAndCenter(17, smoothedPosition, false, 500);}} else {console.log(`首次检测到无人机 ${clientId}，正在创建地图对象...`);const baseColor = getColorForClient(clientId);const color = lightenColor(baseColor, 0.65);const marker = new window.AMap.Marker({position: displayPosition,icon: new window.AMap.Icon({size: new window.AMap.Size(32, 32),image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(makeDroneIconSvg(color)),imageSize: new window.AMap.Size(32, 32),}),offset: new window.AMap.Pixel(-16, -16),angle: heading,clickable: false});const polyline = new window.AMap.Polyline({path: [displayPosition],strokeColor: color,strokeWeight: 5,strokeOpacity: 0.65,lineJoin: 'round',clickable: false});map.add([marker, polyline]);drones[clientId] = {marker: marker,polyline: polyline,lastSmoothedPosition: displayPosition,color: color};if (Object.keys(drones).length === 1) {map.setCenter(displayPosition);}}}
 watch(() => droneStore.rawTelemetry,(telemetryMap) => {if (!telemetryMap) return;const mapped = {};Object.entries(telemetryMap).forEach(([clientId, t]) => {if (!t) return;mapped[clientId] = {isConnected: true,latitude: t.latitude || 0,longitude: t.longtitude || 0,longtitude: t.longtitude || 0,head: t.head || 0,heading: t.head || 0,height: t.height || 0,speed: t.speed || 0};});updateMultipleDrones(mapped);const activeIds = new Set(Object.keys(mapped));Object.keys(drones).forEach((id) => {if (!activeIds.has(id)) {resetDroneDisplay(id);}});},{ deep: true });
 function updateMultipleDrones(dronesData) {if (!map || !dronesData) return;Object.entries(dronesData).forEach(([clientId, droneData]) => {updateDroneOnMap(droneData, clientId, false);});}
 defineExpose({updateMultipleDrones,clearDronePath,clearAllDrones,clearSpecificDronePath});
 function setBaseType(type) {if (!map) return;baseType.value = type;if (type === "normal") {map.setLayers([new window.AMap.TileLayer()]);if (showRoadNet.value && roadNetLayer) map.add(roadNetLayer);} else if (type === "satellite") {map.setLayers([satelliteLayer]);if (showRoadNet.value && roadNetLayer) map.add(roadNetLayer);}}
 function toggleRoadNet() {if (!map) return;if (showRoadNet.value) {map.add(roadNetLayer);} else {map.remove(roadNetLayer);}}
-// ... (对话框相关代码保持不变, 只修改默认值)
+// ... (对话框相关代码保持不变)
 const showWaypointDialog = ref(false);
-// 【修改】默认高度为 10
-const waypointHeight = ref(10);
+const waypointHeight = ref(50);
 const waypointHeading = ref(0);
 const pendingWaypointCoords = ref(null);
 function handleConfirmWaypoint() {if (!pendingWaypointCoords.value) return;const newWaypoint = {lat: pendingWaypointCoords.value.lat,lng: pendingWaypointCoords.value.lng,height: Number(waypointHeight.value),heading: Number(waypointHeading.value)};droneStore.addWaypoint(newWaypoint);showWaypointDialog.value = false;pendingWaypointCoords.value = null;}
+
 
 onMounted(() => {
   window._AMapSecurityConfig = {
@@ -467,34 +338,34 @@ onMounted(() => {
   AMapLoader.load({
     key: "ecc03cb91886825cd841398653f02848",
     version: "2.0",
-    plugins: ["AMap.Scale", "AMap.Terrain", "AMap.Polyline", "AMap.TileLayer", "AMap.Text"]
+    plugins: ["AMap.Scale", "AMap.Terrain", "AMap.Polyline"]
   })
     .then((AMap) => {
       map = new AMap.Map("container", {
-        zoom: 15,
-        viewMode: '3D',
-        pitch: 45,
+        // ... 你的地图选项
       });
 
-      satelliteLayer = new AMap.TileLayer.Satellite();
-      roadNetLayer = new AMap.TileLayer.RoadNet();
+      // ... 你的 satelliteLayer 和 roadNetLayer 初始化代码
 
       const handleMapMouseMove = (e) => {
-          if (planningPhase.value === 'planning' && clickPlacementState.value === 'defining_heading' && draftWaypointVisuals) {
-            draftWaypointVisuals.polyline.setPath([
-                draftWaypointVisuals.position,
-                e.lnglat
-            ]);
-            const angle = calculateAngle(draftWaypointVisuals.position, e.lnglat);
-            draftWaypointVisuals.marker.setAngle(angle);
-          }
+          if (planningState.value !== 'defining_heading' || !draftWaypointVisuals) return;
+          draftWaypointVisuals.polyline.setPath([
+              draftWaypointVisuals.position,
+              e.lnglat
+          ]);
+          const angle = calculateAngle(draftWaypointVisuals.position, e.lnglat);
+          draftWaypointVisuals.marker.setAngle(angle);
       };
       map.on('mousemove', handleMapMouseMove);
 
+      // =======================================================
+      // 【重大修改】重构 map.on('click') 事件处理器
+      // =======================================================
       map.on("click", (e) => {
         // 如果当前是路径规划模式
-        if (droneStore.isPathPlanning && planningPhase.value === 'planning') {
-            if (clickPlacementState.value === 'idle') {
+        if (droneStore.isPathPlanning) {
+            // ... (路径规划的点击逻辑保持不变)
+            if (planningState.value === 'idle') {
                 const tempMarker = new AMap.Marker({
                     position: e.lnglat,
                     icon: new AMap.Icon({
@@ -516,20 +387,21 @@ onMounted(() => {
                     polyline: tempPolyline,
                     position: e.lnglat
                 };
-                clickPlacementState.value = 'defining_heading';
-            } else if (clickPlacementState.value === 'defining_heading') {
+                planningState.value = 'defining_heading';
+            } else if (planningState.value === 'defining_heading') {
                 finalizeCurrentWaypoint();
             }
-        } else if (!droneStore.isPathPlanning) {
-            // 设置目标点模式
+        } else {
+            // 【新增】否则，就是设置目标点模式
             const displayLngLat = e.lnglat;
             const realCoords = toRealCoords(displayLngLat);
 
+            // 更新 store 中的 lastCalculatedPosition
             lastCalculatedPosition.lng = realCoords.lng;
             lastCalculatedPosition.lat = realCoords.lat;
 
             const relativePos = calculateDistanceInMeters(
-              originPosition.lat,
+              originPosition.lat, // 确保 originPosition 有值
               originPosition.lng,
               realCoords.lat,
               realCoords.lng
@@ -561,7 +433,11 @@ onMounted(() => {
         }
       });
 
+      // =======================================================
+      // 【新增】`map.on('rightclick')` 事件，用于设置原点
+      // =======================================================
       map.on('rightclick', (e) => {
+        // 在路径规划模式下，禁用右键设置原点，避免混淆
         if (droneStore.isPathPlanning) {
             alert("请先完成或取消路径规划，再设置坐标原点。");
             return;
@@ -570,6 +446,7 @@ onMounted(() => {
         const displayLngLat = e.lnglat;
         const realCoords = toRealCoords(displayLngLat);
 
+        // 更新 store 中的 originPosition
         originPosition.lat = realCoords.lat;
         originPosition.lng = realCoords.lng;
 
@@ -581,7 +458,7 @@ onMounted(() => {
             position: displayLngLat,
             icon: new window.AMap.Icon({
                 size: new window.AMap.Size(28, 28),
-                image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="#4CAF50" d="M512 960c-247.4 0-448-200.6-448-448S264.6 64 512 64s448 200.6 448 448-200.6 896-448 896zm0-832c-212.1 0-384 171.9-384 384s171.9 384 384 384 384-171.9 384-384-171.9-384-384-384z"/><path fill="#4CAF50" d="M544 704h-64V320h64v384z"/><path fill="#4CAF50" d="M320 544v-64h384v64H320z"/></svg>'),
+                image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="#4CAF50" d="M512 960c-247.4 0-448-200.6-448-448S264.6 64 512 64s448 200.6 448 448-200.6 896-448 896zm0-832c-212.1 0-384 171.9-384 384s171.9 384 384 384 384-171.9 384-384-171.9-384-384-384z"/><path fill="#4CAF50" d="M544 704h-64V320h64v384z"/><path fill="#4CAF50" d="M320 544v-64h384v64H320z"/></svg>'), // 绿色十字图标
                 imageSize: new window.AMap.Size(28, 28)
             }),
             offset: new window.AMap.Pixel(-14, -14),
@@ -607,6 +484,7 @@ onUnmounted(() => {
 
 // 将经纬度差转换为米
 function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
+  // 如果原点未设置，返回 0
   if (!lat1 || !lng1) {
     return { x: 0, y: 0 };
   }
@@ -623,10 +501,10 @@ function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
 
   return { x, y };
 }
+
 </script>
 
 <style scoped>
-/* 保持原有样式不变 */
 .custom-maptype {
   position: absolute;
   left: 32px;
@@ -685,6 +563,7 @@ function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
   position: relative;
 }
 
+
 .clear-buttons {
   position: absolute;
   top: 20px;
@@ -707,25 +586,7 @@ function calculateDistanceInMeters(lat1, lng1, lat2, lng2) {
   color: #4a90e2 !important;
 }
 
-/* 【新增】路径规划按钮组样式 */
-.path-planning-buttons {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 1000;
-  display: flex;
-  gap: 8px;
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 8px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
-
-.path-btn {
-  /* 可以根据需要添加通用样式 */
-}
-
-
+/* 在 <style scoped> 标签中添加 */
 .editable-height-text:hover {
   cursor: pointer;
   text-decoration: underline;

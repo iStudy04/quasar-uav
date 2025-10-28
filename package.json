@@ -15,8 +15,12 @@
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
     "@quasar/extras": "^1.16.4",
+    "@types/leaflet": "^1.9.21",
     "axios": "^1.2.1",
+    "leaflet": "^1.9.4",
+    "leaflet-rotatedmarker": "^0.2.0",
     "nipplejs": "^0.10.2",
+    "ol": "^10.6.1",
     "pinia": "^3.0.1",
     "quasar": "^2.16.0",
     "vue": "^3.4.18",
