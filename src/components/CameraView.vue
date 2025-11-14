@@ -1,13 +1,7 @@
 <template>
   <q-card flat class="tech-camera-card">
-    <div class="camera-header tech-text">视频图传</div>
+    <div class="camera-header tech-text">视频图传 (来源: {{ ip || 'N/A' }})</div>
     <div class="camera-container">
-      <!--
-        将 <img> 替换为 <video> 标签
-        - `ref="videoPlayer"` 用于在脚本中获取DOM元素
-        - `autoplay muted playsinline` 是为了让视频在所有浏览器中都能自动播放
-        - `controls` 方便调试，可以根据需要移除
-      -->
       <video
         ref="videoPlayer"
         class="tech-camera-feed"
@@ -23,63 +17,64 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 
+// --- 配置 ---
+// 修改为你的 MediaMTX 服务器的实际 IP 地址
+const MEDIAMTX_SERVER_IP = '127.0.0.1';
+// MediaMTX WebRTC (WHEP) API 默认端口，通常是 8889
+const MEDIAMTX_WEBRTC_PORT = '8889';
+// 这个前缀需要和你 ffmpeg 推流脚本中的路径前缀保持一致 (例如 "live/")
+const STREAM_PREFIX = 'live';
+// --- 配置结束 ---
+
+
 const props = defineProps({
-  // ip 属性仍然保留，用于生成流路径
-  ip: String,
+  id: String,
 });
 
-// 创建一个 ref 来引用 <video> 元素
 const videoPlayer = ref(null);
-
-// 定义一个变量来持有 WebRTC 连接实例，方便管理
 let peerConnection = null;
 
-// 根据传入的 ip 动态计算 mediamtx 中的流路径
 const streamPath = computed(() => {
-  if (!props.ip) {
+  if (!props.id) {
     return null;
   }
-  // 从 "192.168.1.183" 中提取 "183"
-  const lastOctet = props.ip.split(".").pop();
-  // 按照约定拼接路径："robot/robot_183"
-  return `robot/robot_${lastOctet}`;
+  // 将 IP 地址中的 '.' 替换为 '_' 来创建唯一的流名称
+  // 例如: "192.168.1.101" -> "192_168_1_101"
+  const streamName = props.id.replace(/\./g, '_');
+  console.log(props);
+  // 拼接成完整的路径: "live/192_168_1_101"
+  return `${STREAM_PREFIX}/${streamName}`;
 });
 
-// 核心函数：启动 WebRTC 连接
 const startWebRTCStream = async (path) => {
   if (!path) {
-    console.log("Stream path is not defined. Aborting.");
+    console.log("Stream path is not defined for IP:", props.id);
     return;
   }
 
-  // 1. 如果已有连接，先关闭，防止重复连接
   if (peerConnection) {
     peerConnection.close();
   }
 
-  // 2. 创建新的 RTCPeerConnection 实例
   peerConnection = new RTCPeerConnection();
 
-  // 3. 监听 ontrack 事件，当收到视频流时，将其附加到 <video> 元素上
   peerConnection.ontrack = (event) => {
     if (videoPlayer.value) {
-      console.log("Received remote stream, attaching to video element.");
+      console.log(`[${props.id}] Received remote stream, attaching to video element.`);
       videoPlayer.value.srcObject = event.streams[0];
     }
   };
 
-  // 4. 添加我们想要接收的媒体类型（只接收视频）
   peerConnection.addTransceiver("video", { direction: "recvonly" });
-  // 如果您的流有音频，可以取消下面这行的注释
-  // peerConnection.addTransceiver('audio', { 'direction': 'recvonly' });
+  // 如果你的流有音频, 取消注释下面这行
+  // peerConnection.addTransceiver('audio', { direction: 'recvonly' });
 
-  // 5. 创建 Offer (SDP)
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
-  // 6. 将 Offer 发送给 MediaMTX 的 WHEP API 接口
-  // MediaMTX 默认的 WebRTC API 端口是 8889
-  const apiUrl = `http://127.0.0.1:8889/${path}/whep`;
+  // [修改点 2] 使用配置变量动态构建 API URL
+  const apiUrl = `http://${MEDIAMTX_SERVER_IP}:${MEDIAMTX_WEBRTC_PORT}/${path}/whep`;
+  console.log(`Connecting to WHEP endpoint: ${apiUrl}`);
 
   try {
     const response = await fetch(apiUrl, {
@@ -91,45 +86,42 @@ const startWebRTCStream = async (path) => {
     });
 
     if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
+        throw new Error(`Server responded with status ${response.status} ${response.statusText}`);
     }
 
-    // 7. 接收 MediaMTX 返回的 Answer (SDP)
     const answerSdp = await response.text();
-
-    // 8. 设置远程描述，完成握手，连接建立
     await peerConnection.setRemoteDescription(
       new RTCSessionDescription({ type: "answer", sdp: answerSdp })
     );
-    console.log(`WebRTC connection established for path: ${path}`);
+    console.log(`[${props.id}] WebRTC connection established for path: ${path}`);
 
   } catch (error) {
-    console.error("Failed to start WebRTC stream:", error);
-    // 可以在这里添加一些用户提示，比如在视频区域显示错误信息
+    console.error(`[${props.id}] Failed to start WebRTC stream for path ${path}:`, error);
+    // 可选：在这里更新UI，显示连接失败
+    if (videoPlayer.value) {
+        videoPlayer.value.srcObject = null; // 清空视频
+    }
   }
 };
 
-// 组件挂载时，启动视频流
 onMounted(() => {
-  console.log("摄像头IP地址为: " + props.ip);
+  console.log(`[${props.id}] Component mounted. Attempting to start stream.`);
   startWebRTCStream(streamPath.value);
 });
 
-// 组件卸载时，清理连接，释放资源
 onUnmounted(() => {
   if (peerConnection) {
-    console.log("Closing WebRTC connection.");
+    console.log(`[${props.id}] Component unmounted. Closing WebRTC connection.`);
     peerConnection.close();
     peerConnection = null;
   }
 });
 
-// 监听 ip prop 的变化，如果变化了，则重新连接到新的流
-watch(() => props.ip, (newIp) => {
-    console.log(`IP changed to: ${newIp}. Reconnecting stream...`);
-    // streamPath 会自动更新，我们只需要用新路径重新调用函数即可
+watch(() => props.id, (newIp, oldIp) => {
+    console.log(`[${oldIp} -> ${newIp}] IP prop changed. Reconnecting stream...`);
+    // streamPath 是计算属性, 会自动更新, 我们只需用新路径重新调用函数
     startWebRTCStream(streamPath.value);
-});
+}, { immediate: false }); // immediate: false 避免 onMounted 时重复执行
 
 </script>
 

@@ -69,7 +69,7 @@
 
 
     <div class="tech-separator"></div>
-    <CameraView :ip="curDroneIp"/>
+    <CameraView :id="curDroneId"/>
     <!-- <CameraView ip="192.168.1.101"/> -->
   </q-card>
 </template>
@@ -88,10 +88,10 @@ const {droneList, selectedDroneId, originPosition } = storeToRefs(droneStore)
 // 使用 storeToRefs 保持响应性
 const {selectedDrone, droneStatus, batteryLevel} = storeToRefs(droneStore);
 
-const curDroneIp = computed(() => {
+const curDroneId = computed(() => {
   const drone = droneList.value.find(d => d.id === selectedDroneId.value)
   if (!drone) return ''
-  return `${drone.ip}`
+  return `${drone.id}`
 })
 
 const isConnected = computed(() => droneStatus.value.isConnected);
