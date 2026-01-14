@@ -1,7 +1,15 @@
 const routes = [
   {
+    path: '/login',
+    component: () => import('layouts/AuthLayout.vue'),
+    children: [
+      { path: '', component: () => import('pages/LoginPage.vue') }
+    ]
+  },
+  {
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
+    meta: { requiresAuth: true },
     children: [
       { path: '', component: () => import('pages/IndexPage.vue') },
       // 集群管理
@@ -25,13 +33,14 @@ const routes = [
       // 任务指控
       { path: '/mission/scene', component: () => import('pages/mission/SceneSetupPage.vue') },
       { path: '/mission/task', component: () => import('pages/mission/MissionSetupPage.vue') },
+      { path: '/mission/ai-planning', component: () => import('pages/mission/AiTaskPlanningPage.vue') },
 
       // 集群图传
       { path: '/stream/video', component: () => import('pages/stream/VideoStreamPage.vue') },
       { path: '/stream/semantic', component: () => import('pages/stream/SemanticStreamPage.vue') },
 
       // 网络管理
-      { path: '/network/topology', component: () => import('pages/network/TopologyPage.vue') },
+      { path: '/network/topology', component: () => import('pages/network/NetworkTopologyPage.vue') },
       { path: '/network/cellular', component: () => import('pages/network/CellularCommPage.vue') },
       { path: '/network/mesh', component: () => import('pages/network/MeshCommPage.vue') },
       { path: '/network/select', component: () => import('pages/network/NetworkSelectPage.vue') },
@@ -56,6 +65,9 @@ const routes = [
 
       // 数据管理
       { path: '/data', component: () => import('pages/data/DataManagementPage.vue') },
+      
+      // 系统设置
+      { path: '/settings', component: () => import('pages/SettingsPage.vue') },
     ]
   },
 
@@ -68,3 +80,5 @@ const routes = [
 ]
 
 export default routes
+
+

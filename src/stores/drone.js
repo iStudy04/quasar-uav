@@ -1,10 +1,11 @@
 // src/stores/drone.js
 import {defineStore} from 'pinia'
 import {ref, computed} from 'vue'
-import {api} from 'boot/axios' // 引入Quasar的axios实例
+import {api} from 'src/services/api'
 
 // WebSocket 地址 - 与 single.html 保持一致
-const WS_URL = `ws://127.0.0.1:8081/ws/control`
+const WS_BASE_URL = 'ws://127.0.0.1:8081'
+
 export const useDroneStore = defineStore('drone', () => {
   // --- State ---
   const droneList = ref([])
@@ -87,7 +88,15 @@ export const useDroneStore = defineStore('drone', () => {
       return;
     }
 
-    websocket = new WebSocket(WS_URL);
+     const token = localStorage.getItem('auth_token')
+     if (!token) {
+       addLog('未检测到登录信息，WebSocket 不连接。', 'warn')
+       return
+     }
+
+     const wsUrl = `${WS_BASE_URL}/ws/control?token=${encodeURIComponent(token)}`
+
+    websocket = new WebSocket(wsUrl);
 
     websocket.onopen = () => {
       addLog("WebSocket 连接成功。", 'success');
@@ -483,3 +492,4 @@ export const useDroneStore = defineStore('drone', () => {
     clearPlannedPath, // 【新增】导出新函数
   }
 })
+

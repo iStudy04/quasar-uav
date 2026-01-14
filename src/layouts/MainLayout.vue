@@ -6,7 +6,36 @@
         <q-btn flat dense round icon="menu" @click="drawer = !drawer" class="tech-btn" />
         <q-toolbar-title class="text-weight-bold tech-text">无人机集群操作系统</q-toolbar-title>
         <q-space />
-        <q-btn flat icon="settings" class="tech-btn"/>
+        
+        <!-- 设置按钮 -->
+        <q-btn flat round icon="settings" class="tech-btn">
+          <q-menu>
+            <q-list style="min-width: 200px">
+              <q-item clickable v-close-popup @click="goToSettings">
+                <q-item-section avatar>
+                  <q-icon name="tune" color="primary" />
+                </q-item-section>
+                <q-item-section>系统设置</q-item-section>
+              </q-item>
+              
+              <q-item clickable v-close-popup @click="showUserInfo">
+                <q-item-section avatar>
+                  <q-icon name="account_circle" color="primary" />
+                </q-item-section>
+                <q-item-section>用户信息</q-item-section>
+              </q-item>
+              
+              <q-separator />
+              
+              <q-item clickable v-close-popup @click="handleLogout">
+                <q-item-section avatar>
+                  <q-icon name="logout" color="negative" />
+                </q-item-section>
+                <q-item-section>退出登录</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
       </q-toolbar>
     </q-header>
 
@@ -81,6 +110,10 @@
           <q-item clickable v-ripple to="/mission/task" class="tech-menu-item">
             <q-item-section avatar><q-icon name="rule" class="tech-icon" /></q-item-section>
             <q-item-section class="tech-text">任务设置</q-item-section>
+          </q-item>
+          <q-item clickable v-ripple to="/mission/ai-planning" class="tech-menu-item">
+            <q-item-section avatar><q-icon name="smart_toy" class="tech-icon" /></q-item-section>
+            <q-item-section class="tech-text">AI 任务规划</q-item-section>
           </q-item>
         </q-expansion-item>
 
@@ -185,17 +218,66 @@
 <script setup>
 import { ref } from 'vue'
 import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useQuasar } from 'quasar'
 import { useDroneStore } from 'stores/drone'
+import { useAuthStore } from 'stores/auth'
 
 const drawer = ref(true)
-const droneStore = useDroneStore() // 获取store实例
+const router = useRouter()
+const $q = useQuasar()
+const droneStore = useDroneStore()
+const authStore = useAuthStore()
 
 onMounted(() => {
-  // 当组件挂载后，开始连接WebSocket
-  droneStore.connectWebSocket()
+  if (authStore.isAuthenticated) {
+    droneStore.connectWebSocket()
+  }
 })
-</script>
 
+// 跳转到设置页面
+function goToSettings() {
+  router.push('/settings')
+}
+
+// 显示用户信息
+function showUserInfo() {
+  $q.dialog({
+    title: '用户信息',
+    message: `当前用户: ${authStore.username || '未知'}`,
+    ok: {
+      label: '确定',
+      color: 'primary'
+    }
+  })
+}
+
+// 退出登录
+function handleLogout() {
+  $q.dialog({
+    title: '确认退出',
+    message: '确定要退出登录吗？',
+    cancel: {
+      label: '取消',
+      color: 'grey',
+      flat: true
+    },
+    ok: {
+      label: '退出',
+      color: 'negative'
+    },
+    persistent: true
+  }).onOk(() => {
+    authStore.logout()
+    router.push('/login')
+    $q.notify({
+      type: 'positive',
+      message: '已成功退出登录',
+      position: 'top'
+    })
+  })
+}
+</script>
 
 <style scoped>
 .tech-layout {
@@ -266,5 +348,7 @@ onMounted(() => {
   background: transparent;
 }
 </style>
+
+
 
 

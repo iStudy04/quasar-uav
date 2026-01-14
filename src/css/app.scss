@@ -1,10 +1,19 @@
 // app global css in SCSS form
 
+// 引入现代专业字体
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
 // 淡蓝色科技风格全局样式
 body {
   background: linear-gradient(135deg, #F5F8FA 0%, #E3F2FD 50%, #F5F8FA 100%);
   color: $tech-text;
-  font-family: 'Orbitron', 'Courier New', monospace;
+  // 使用现代专业字体栈
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 // 科技风格卡片
@@ -139,3 +148,4 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 8px 32px rgba(74, 144, 226, 0.1);
 }
+

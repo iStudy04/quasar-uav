@@ -19,7 +19,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 
 // --- 配置 ---
 // 修改为你的 MediaMTX 服务器的实际 IP 地址
-const MEDIAMTX_SERVER_IP = '127.0.0.1';
+//const MEDIAMTX_SERVER_IP = '172.24.8.229';
+const MEDIAMTX_SERVER_IP = window.location.hostname;
 // MediaMTX WebRTC (WHEP) API 默认端口，通常是 8889
 const MEDIAMTX_WEBRTC_PORT = '8889';
 // 这个前缀需要和你 ffmpeg 推流脚本中的路径前缀保持一致 (例如 "live/")
